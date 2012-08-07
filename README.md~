@@ -35,7 +35,8 @@ When we first synthesized our pipeline, our clock period was around 8ns. We thou
 Team Member Contributions
 =========================
  
-All  team  members  contributed  significantly  to  the  overall  design.  Exact  contributions  are given below: 
+All  team  members  contributed  significantly  to  the  overall  design.  Exact  contributions  are 
+given below: 
  
 Vikas Khurana (33%): Caches,  Execution  Units,  Rename/Issue,  CDB,  Fetch  (33%), Decode, Test & Debug (33%)
 
