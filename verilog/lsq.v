@@ -1,0 +1,634 @@
+module lsq(//inputs:
+
+          clock,
+          reset,
+
+          lsq_mem_tag_in,
+          lsq_mem_response_in,
+          lsq_mem_value_in,
+          lsq_mem_value_valid_in,
+          lsq_mem_addr_invalid_in,
+
+          lsq_mispredict1_in,
+          lsq_mispredict2_in,
+
+          lsq_cdb1_in,
+          lsq_cdb1_tag,
+          lsq_cdb1_valid,
+          lsq_cdb1_NPC,
+          lsq_cdb1_take_branch,
+
+          lsq_cdb2_in,
+          lsq_cdb2_tag,
+          lsq_cdb2_valid,
+          lsq_cdb2_NPC,
+          lsq_cdb2_take_branch,
+
+          lsq_commit_ROB1_in,
+          lsq_commit_ROB2_in,
+
+          lsq_commit_ROB1_valid_in,
+          lsq_commit_ROB2_valid_in,
+
+          // instruction 1 from the issue stage:
+          lsq_dest_PRN1_in,
+          lsq_opa1_in,
+          lsq_PRNa1_in,
+          lsq_opa1_valid,
+          lsq_opb1_in,
+          lsq_PRNb1_in,
+          lsq_opb1_valid,
+          lsq_IR1_in,
+          lsq_ROB1_in,
+          lsq_rd_mem1_in,
+          lsq_wr_mem1_in,
+          lsq_instr_valid1_in,
+
+          // instruction 2 from the issue stage:
+          lsq_dest_PRN2_in,
+          lsq_opa2_in,
+          lsq_PRNa2_in,
+          lsq_opa2_valid,
+          lsq_opb2_in,
+          lsq_PRNb2_in,
+          lsq_opb2_valid,
+          lsq_IR2_in,
+          lsq_ROB2_in,
+          lsq_rd_mem2_in,
+          lsq_wr_mem2_in,
+          lsq_instr_valid2_in,
+
+          // outputs:
+          lsq_stall_out,
+
+          // instruction to mem:
+          lsq_target_address_out,
+          lsq_store_data_out,
+
+          lsq_mem_request_out,
+
+          // to the cdb:
+          lsq_dest_PRN_out,
+          lsq_value_out,
+          lsq_ROB_out,
+          lsq_valid_out
+         );
+
+
+input          clock;
+input          reset;
+
+input    [3:0] lsq_mem_tag_in;
+input    [3:0] lsq_mem_response_in;
+input   [63:0] lsq_mem_value_in;
+input          lsq_mem_value_valid_in;
+input          lsq_mem_addr_invalid_in;
+
+input   [63:0] lsq_cdb1_in;
+input    [6:0] lsq_cdb1_tag;
+input          lsq_cdb1_valid;
+input          lsq_cdb1_take_branch;
+input   [63:0] lsq_cdb1_NPC; 
+
+input   [63:0] lsq_cdb2_in;
+input    [6:0] lsq_cdb2_tag;
+input          lsq_cdb2_valid;
+input          lsq_cdb2_take_branch;
+input   [63:0] lsq_cdb2_NPC; 
+
+input    [5:0] lsq_commit_ROB1_in;
+input    [5:0] lsq_commit_ROB2_in;
+
+input          lsq_commit_ROB1_valid_in;
+input          lsq_commit_ROB2_valid_in;
+
+input    [6:0] lsq_dest_PRN1_in;
+input   [63:0] lsq_opa1_in;
+input    [6:0] lsq_PRNa1_in;
+input          lsq_opa1_valid;
+input   [63:0] lsq_opb1_in;
+input    [6:0] lsq_PRNb1_in;
+input          lsq_opb1_valid;
+input   [31:0] lsq_IR1_in;
+input    [5:0] lsq_ROB1_in;
+input          lsq_rd_mem1_in;
+input          lsq_wr_mem1_in;
+input          lsq_instr_valid1_in;
+input          lsq_mispredict1_in;
+
+input    [6:0] lsq_dest_PRN2_in;
+input   [63:0] lsq_opa2_in;
+input    [6:0] lsq_PRNa2_in;
+input          lsq_opa2_valid;
+input   [63:0] lsq_opb2_in;
+input    [6:0] lsq_PRNb2_in;
+input          lsq_opb2_valid;
+input   [31:0] lsq_IR2_in;
+input    [5:0] lsq_ROB2_in;
+input          lsq_rd_mem2_in;
+input          lsq_wr_mem2_in;
+input          lsq_instr_valid2_in;
+input          lsq_mispredict2_in;
+
+reg      [5:0] st_ROB[7:0];
+reg      [6:0] st_opa_PRN[7:0];
+reg     [63:0] st_opa_value[7:0];
+reg            st_opa_valid[7:0];
+reg      [6:0] st_opb_PRN[7:0];
+reg     [63:0] st_opb_value[7:0];
+reg            st_opb_valid[7:0];
+reg     [31:0] st_IR[7:0];
+//reg            st_committed[7:0];
+
+output         lsq_stall_out;
+
+output  [63:0] lsq_target_address_out;
+output  [63:0] lsq_store_data_out;
+
+output   [1:0] lsq_mem_request_out;
+
+output   [6:0] lsq_dest_PRN_out;
+output  [63:0] lsq_value_out;
+output   [5:0] lsq_ROB_out;
+output         lsq_valid_out;
+
+wor      [6:0] lsq_dest_PRN_out;
+wor     [63:0] ld_address_out;
+wor      [5:0] ld_ROB_out;
+
+reg      [2:0] st_head_pointer;
+reg      [2:0] next_st_head_pointer;
+
+reg      [2:0] st_tail_pointer1;
+wire     [2:0] st_tail_pointer2;
+
+wire     [2:0] next_st_tail_pointer1;
+wire     [2:0] next_st_tail_pointer2;
+
+wire     [2:0] st_color1;
+wire     [2:0] st_color2;
+
+reg     [63:0] st_address_out;
+reg            st_address_valid;
+reg     [63:0] lsq_store_data_out;
+
+wire    [15:0] ld_load1_in;
+wire    [15:0] ld_load2_in;
+wire    [15:0] ld_use_enable;
+wire    [15:0] ld_avail_out;
+wire    [15:0] ld_ready_out;
+
+wire    [15:0] mem_in_process;
+
+wire    [63:0] cdb1_in;
+wire    [63:0] cdb2_in;
+
+reg      [5:0] lsq_ROB_out;
+reg            lsq_valid_out;
+
+reg      [3:0] mem_waiting_tag;
+reg      [3:0] next_mem_waiting_tag;
+
+assign lsq_stall_out = (st_head_pointer==next_st_tail_pointer1) || (ld_load1_in==ld_load2_in);
+
+assign lsq_value_out = (lsq_mem_request_out==`BUS_LOAD) ? lsq_mem_value_in : 0;
+
+assign cdb1_in = (lsq_cdb1_take_branch && lsq_cdb1_valid) ? lsq_cdb1_NPC : lsq_cdb1_in;
+assign cdb2_in = (lsq_cdb2_take_branch && lsq_cdb2_valid) ? lsq_cdb2_NPC : lsq_cdb2_in;
+
+assign st_tail_pointer2 = st_tail_pointer1 + 1;
+assign next_st_tail_pointer1 = st_tail_pointer1 + 2;
+assign next_st_tail_pointer2 = next_st_tail_pointer1 + 1;
+
+assign st_color1 = (lsq_wr_mem1_in && lsq_rd_mem2_in) ? st_tail_pointer1 : st_tail_pointer1 - 1;
+
+assign lsq_target_address_out = (st_address_valid) ? st_address_out : (mem_in_process ? ld_address_out : 64'b0);
+assign lsq_mem_request_out = (st_address_valid) ? `BUS_STORE : (mem_in_process ? `BUS_LOAD : `BUS_NONE);
+
+wire committed = (st_opa_valid[st_head_pointer] && st_opb_valid[st_head_pointer] 
+              && (st_ROB[st_head_pointer]==lsq_commit_ROB1_in) && lsq_commit_ROB1_valid_in) ? 1'b1 : 1'b0;
+
+// *** STORE QUEUE ***
+always @*
+begin
+   //$display("OPA_valid:%d, OPB_valid:%d, Head_pointer:%d, OPA_value:%d", st_opa_valid[st_head_pointer], st_opb_valid[st_head_pointer], st_head_pointer, st_opa_value[1]);
+   if(committed/*st_committed[st_head_pointer]*/)
+   begin
+      //$display("THIS HAPPENED:%d", st_head_pointer);
+      st_address_out = st_opb_value[st_head_pointer] + 
+                       {{48{st_IR[st_head_pointer][15]}},st_IR[st_head_pointer][15:0]};
+      lsq_store_data_out = st_opa_value[st_head_pointer];
+      st_address_valid = 1'b1;
+   end
+   else
+   begin
+      st_address_out = 64'b0;
+      lsq_store_data_out = 64'b0;
+      st_address_valid = 1'b0;
+   end
+
+   if(lsq_mem_response_in!=0 && lsq_mem_request_out==`BUS_STORE && committed/*st_committed[st_head_pointer]*/)
+   begin
+      //$display("Finished storing ROB:%d", st_head_pointer);
+      lsq_ROB_out = st_ROB[st_head_pointer];
+      lsq_valid_out = 1'b1;
+      next_st_head_pointer = st_head_pointer + 1;
+   end
+   else if((lsq_mem_value_valid_in/* || lsq_mem_addr_invalid_in*/) && (mem_in_process!=0))
+   begin
+      lsq_ROB_out = ld_ROB_out;
+      lsq_valid_out = 1'b1;
+      next_st_head_pointer = st_head_pointer;
+   end
+   else
+   begin
+      lsq_ROB_out = 6'b0;
+      lsq_valid_out = 1'b0;
+      next_st_head_pointer = st_head_pointer;
+   end
+end
+
+integer i;
+
+always @(posedge clock)
+begin
+/*
+   $display("H:%d, T1:%d, T2:%d", st_head_pointer, st_tail_pointer1, st_tail_pointer2);
+   for(i=0; i<8; i=i+1)
+   begin
+     $display("[%1d] st_opa_PRN[%1d]:%d, st_opa_value[%1d]:%h, st_opa_valid[%1d]:%d", i, i, st_opa_PRN[i], i, st_opa_value[i], i, st_opa_valid[i]);
+     $display("[%1d] st_opb_PRN[%1d]:%d, st_opb_value[%1d]:%h, st_opb_valid[%1d]:%d", i, i, st_opb_PRN[i], i, st_opb_value[i], i, st_opb_valid[i]);
+     $display("[%1d] st_ROB[%1d]:%d, st_committed[%1d]", i, i, st_ROB[i], st_committed[i]);
+   end
+   $display("---");
+*/
+   if(reset)
+   begin
+      for(i=0; i<8; i=i+1)
+      begin
+        st_ROB[i] <= `SD 6'b0;
+        st_opa_PRN[i] <= `SD 7'd31;
+        st_opa_value[i] <= `SD 64'b0;
+        st_opa_valid[i] <= `SD 1'b0;
+        st_opb_PRN[i] <= `SD 7'd31;
+        st_opb_value[i] <= `SD 64'b0;
+        st_opb_valid[i] <= `SD 1'b0;
+        st_IR[i] <= `SD 32'b0;
+        //st_committed[i] <= `SD 1'b0;
+      end
+      st_tail_pointer1 <= `SD 3'b0;
+      st_head_pointer <= `SD 3'b0;
+      mem_waiting_tag <= `SD 0;
+   end
+   else if (lsq_mispredict1_in || lsq_mispredict2_in)
+   begin
+      for(i=0; i<8; i=i+1)
+      begin
+        st_ROB[i] <= `SD 6'b0;
+        st_opa_PRN[i] <= `SD 7'd31;
+        st_opa_value[i] <= `SD 64'b0;
+        st_opa_valid[i] <= `SD 1'b0;
+        st_opb_PRN[i] <= `SD 7'd31;
+        st_opb_value[i] <= `SD 64'b0;
+        st_opb_valid[i] <= `SD 1'b0;
+        st_IR[i] <= `SD 32'b0;
+        //st_committed[i] <= `SD 1'b0;
+      end
+      st_tail_pointer1 <= `SD 3'b0;
+      st_head_pointer <= `SD 3'b0;
+      mem_waiting_tag <= `SD 0;
+   end
+   else
+   begin 
+      if(lsq_instr_valid1_in && lsq_wr_mem1_in && lsq_instr_valid2_in && lsq_wr_mem2_in)
+      begin
+         //$display("Something's in the store queue (1)");
+         st_ROB[st_tail_pointer1] <= `SD lsq_ROB1_in;
+         // OPA
+         // * CDB1 *
+         if((lsq_PRNa1_in==lsq_cdb1_tag) && lsq_cdb1_valid && (lsq_cdb1_tag != 7'd31))
+         begin
+            st_opa_value[st_tail_pointer1] <= `SD cdb1_in;
+            st_opa_valid[st_tail_pointer1] <= `SD 1'b1;
+         end
+         // * CDB2 *
+         else if((lsq_PRNa1_in==lsq_cdb2_tag) && lsq_cdb2_valid && (lsq_cdb2_tag != 7'd31))
+         begin
+            st_opa_value[st_tail_pointer1] <= `SD cdb2_in;
+            st_opa_valid[st_tail_pointer1] <= `SD 1'b1;
+         end
+         else
+         begin
+            st_opa_value[st_tail_pointer1] <= `SD lsq_opa1_in;
+            st_opa_valid[st_tail_pointer1] <= `SD lsq_opa1_valid;
+         end
+         st_opa_PRN[st_tail_pointer1] <= `SD lsq_PRNa1_in;
+         // OPB
+         // * CDB1 *
+         if((lsq_PRNb1_in==lsq_cdb1_tag) && lsq_cdb1_valid && (lsq_cdb1_tag != 7'd31))
+         begin
+            st_opb_value[st_tail_pointer1] <= `SD cdb1_in;
+            st_opb_valid[st_tail_pointer1] <= `SD 1'b1;
+         end
+         // * CDB2 *
+         else if((lsq_PRNb1_in==lsq_cdb2_tag) && lsq_cdb2_valid && (lsq_cdb2_tag != 7'd31))
+         begin
+            st_opb_value[st_tail_pointer1] <= `SD cdb2_in;
+            st_opb_valid[st_tail_pointer1] <= `SD 1'b1;
+         end
+         else
+         begin
+            st_opb_value[st_tail_pointer1] <= `SD lsq_opb1_in;
+            st_opb_valid[st_tail_pointer1] <= `SD lsq_opb1_valid;
+         end
+         st_opb_PRN[st_tail_pointer1] <= `SD lsq_PRNb1_in;
+         //st_committed[st_tail_pointer1] <= `SD 0;
+         st_IR[st_tail_pointer1] <= `SD lsq_IR1_in;
+
+         st_ROB[st_tail_pointer2] <= `SD lsq_ROB2_in;
+         // OPA
+         // * CDB1 *
+         if((lsq_PRNa2_in==lsq_cdb1_tag) && lsq_cdb1_valid && (lsq_cdb1_tag != 7'd31))
+         begin
+            st_opa_value[st_tail_pointer2] <= `SD cdb1_in;
+            st_opa_valid[st_tail_pointer2] <= `SD 1'b1;
+         end
+         // * CDB2 *
+         else if((lsq_PRNa2_in==lsq_cdb2_tag) && lsq_cdb2_valid && (lsq_cdb2_tag != 7'd31))
+         begin
+            st_opa_value[st_tail_pointer2] <= `SD cdb2_in;
+            st_opa_valid[st_tail_pointer2] <= `SD 1'b1;
+         end
+         else
+         begin
+            st_opa_value[st_tail_pointer2] <= `SD lsq_opa2_in;
+            st_opa_valid[st_tail_pointer2] <= `SD lsq_opa2_valid;
+         end
+         st_opa_PRN[st_tail_pointer2] <= `SD lsq_PRNa2_in;
+         // OPB
+         // * CDB1 *
+         if((lsq_PRNb2_in==lsq_cdb1_tag) && lsq_cdb1_valid && (lsq_cdb1_tag != 7'd31))
+         begin
+            st_opb_value[st_tail_pointer2] <= `SD cdb1_in;
+            st_opb_valid[st_tail_pointer2] <= `SD 1'b1;
+         end
+         // * CDB2 *
+         else if((lsq_PRNb2_in==lsq_cdb2_tag) && lsq_cdb2_valid && (lsq_cdb2_tag != 7'd31))
+         begin
+            st_opb_value[st_tail_pointer2] <= `SD cdb2_in;
+            st_opb_valid[st_tail_pointer2] <= `SD 1'b1;
+         end
+         else
+         begin
+            st_opb_value[st_tail_pointer2] <= `SD lsq_opb2_in;
+            st_opb_valid[st_tail_pointer2] <= `SD lsq_opb2_valid;
+         end
+         st_opb_PRN[st_tail_pointer2] <= `SD lsq_PRNb2_in;
+         //st_committed[st_tail_pointer2] <= `SD 0;
+         st_IR[st_tail_pointer2] <= `SD lsq_IR2_in;
+
+         st_tail_pointer1 <= `SD next_st_tail_pointer1;
+      end
+      else if(lsq_instr_valid1_in && lsq_wr_mem1_in && (!lsq_instr_valid2_in || !lsq_wr_mem2_in))
+      begin
+         //$display("Something's in the store queue (2)");
+         st_ROB[st_tail_pointer1] <= `SD lsq_ROB1_in;
+         // OPA
+         // * CDB1 *
+         if((lsq_PRNa1_in==lsq_cdb1_tag) && lsq_cdb1_valid && (lsq_cdb1_tag != 7'd31))
+         begin
+            //$display("HAHAHAHAHA");
+            //$display("SHIPS OPA CDB1\nTail:%d", st_tail_pointer1);
+            //$display("lsq_cdb1_in:%d", lsq_cdb1_in);
+            st_opa_value[st_tail_pointer1] <= `SD cdb1_in;
+            st_opa_valid[st_tail_pointer1] <= `SD 1'b1;
+         end
+         else if((lsq_PRNa1_in==lsq_cdb2_tag) && lsq_cdb2_valid && (lsq_cdb2_tag != 7'd31))
+         begin
+            //$display("SHIPS OPA CDB2");
+            st_opa_value[st_tail_pointer1] <= `SD cdb2_in;
+            st_opa_valid[st_tail_pointer1] <= `SD 1'b1;
+         end
+         else
+         begin
+            //$display("Blah A (NO CDB2)");
+            st_opa_value[st_tail_pointer1] <= `SD lsq_opa1_in;
+            st_opa_valid[st_tail_pointer1] <= `SD lsq_opa1_valid;
+         end
+         st_opa_PRN[st_tail_pointer1] <= `SD lsq_PRNa1_in;
+         // OPB
+         // * CDB1 *
+         if((lsq_PRNb1_in==lsq_cdb1_tag) && lsq_cdb1_valid && (lsq_cdb1_tag != 7'd31))
+         begin
+            //$display("SHIPS OPB CDB1");
+            st_opb_value[st_tail_pointer1] <= `SD cdb1_in;
+            st_opb_valid[st_tail_pointer1] <= `SD 1'b1;
+         end
+         // * CDB2 *
+         else if((lsq_PRNb1_in==lsq_cdb2_tag) && lsq_cdb2_valid && (lsq_cdb2_tag != 7'd31))
+         begin
+            //$display("SHIPS OPB CDB2");
+            st_opb_value[st_tail_pointer1] <= `SD cdb2_in;
+            st_opb_valid[st_tail_pointer1] <= `SD 1'b1;
+         end
+         else
+         begin
+            //$display("Blah B (NO CDB2)");
+            st_opb_value[st_tail_pointer1] <= `SD lsq_opb1_in;
+            st_opb_valid[st_tail_pointer1] <= `SD lsq_opb1_valid;
+         end
+         st_opb_PRN[st_tail_pointer1] <= `SD lsq_PRNb1_in;
+         st_IR[st_tail_pointer1] <= `SD lsq_IR1_in;
+         //st_committed[st_tail_pointer1] <= `SD 0;
+
+         st_tail_pointer1 <= `SD st_tail_pointer2;
+      end
+      else if((!lsq_instr_valid1_in || !lsq_wr_mem1_in) && lsq_instr_valid2_in && lsq_wr_mem2_in)
+      begin
+         //$display("Something's in the store queue (3)");
+         st_ROB[st_tail_pointer1] <= `SD lsq_ROB2_in;
+         // OPA
+         // * CDB1 *
+         if((lsq_PRNa2_in==lsq_cdb1_tag) && lsq_cdb1_valid && (lsq_cdb1_tag != 7'd31))
+         begin
+            //$display("Ships CDB1 a2");
+            st_opa_value[st_tail_pointer1] <= `SD cdb1_in;
+            st_opa_valid[st_tail_pointer1] <= `SD lsq_cdb1_valid; //1'b1;
+         end
+         // * CDB2 *
+         else if((lsq_PRNa2_in==lsq_cdb2_tag) && lsq_cdb2_valid && (lsq_cdb2_tag != 7'd31))
+         begin
+            //$display("Ships CDB2 a2");
+            st_opa_value[st_tail_pointer1] <= `SD cdb2_in;
+            st_opa_valid[st_tail_pointer1] <= `SD lsq_cdb2_valid; //1'b1;
+         end
+         else
+         begin
+            //$display("No ships for a2");
+            st_opa_value[st_tail_pointer1] <= `SD lsq_opa2_in;
+            st_opa_valid[st_tail_pointer1] <= `SD lsq_opa2_valid;
+         end
+         st_opa_PRN[st_tail_pointer1] <= `SD lsq_PRNa2_in;
+         // OPB
+         // * CDB1 *
+         if((lsq_PRNb2_in==lsq_cdb1_tag) && lsq_cdb1_valid && (lsq_cdb1_tag != 7'd31))
+         begin
+            //$display("Ships CDB1 b2");
+            st_opb_value[st_tail_pointer1] <= `SD cdb1_in;
+            st_opb_valid[st_tail_pointer1] <= `SD lsq_cdb1_valid; //1'b1;
+         end
+         // * CDB2 *
+         else if((lsq_PRNb2_in==lsq_cdb2_tag) && lsq_cdb2_valid && (lsq_cdb2_tag != 7'd31))
+         begin
+            //$display("Ships CDB2 b2");
+            st_opb_value[st_tail_pointer1] <= `SD cdb2_in;
+            st_opb_valid[st_tail_pointer1] <= `SD lsq_cdb2_valid; //1'b1;
+         end
+         else
+         begin
+            //$display("No ships for b2");
+            st_opb_value[st_tail_pointer1] <= `SD lsq_opb2_in;
+            st_opb_valid[st_tail_pointer1] <= `SD lsq_opb2_valid;
+         end
+         st_opb_PRN[st_tail_pointer1] <= `SD lsq_PRNb2_in;
+         st_IR[st_tail_pointer1] <= `SD lsq_IR2_in;
+         //st_committed[st_tail_pointer1] <= `SD 0;
+
+         st_tail_pointer1 <= `SD st_tail_pointer2;
+      end
+
+      if(lsq_mem_response_in!=0 && lsq_mem_request_out==`BUS_STORE && committed/*st_committed[st_head_pointer]*/)
+      begin
+         st_ROB[st_head_pointer] <= `SD 6'b0;
+         st_opa_PRN[st_head_pointer] <= `SD 7'd31;
+         st_opa_value[st_head_pointer] <= `SD 64'b0;
+         st_opa_valid[st_head_pointer] <= `SD 1'b0;
+         st_opb_PRN[st_head_pointer] <= `SD 7'd31;
+         st_opb_value[st_head_pointer] <= `SD 64'b0;
+         st_opb_valid[st_head_pointer] <= `SD 1'b0;
+         st_IR[st_head_pointer] <= `SD 32'b0;
+         //st_committed[st_head_pointer] <= `SD 1'b0;
+      end
+
+      st_head_pointer <= `SD next_st_head_pointer;
+
+      for(i=0; i<8; i=i+1)
+      begin
+         if((st_opa_PRN[i]==lsq_cdb1_tag) && lsq_cdb1_valid && lsq_cdb1_tag!=7'd31)
+         begin
+            //$display("OPA IS NOW VALID1\nOPA:%d", lsq_cdb1_tag);
+            st_opa_value[i] <= `SD cdb1_in;
+            st_opa_valid[i] <= `SD 1'b1;
+         end
+         if((st_opa_PRN[i]==lsq_cdb2_tag) && lsq_cdb2_valid && lsq_cdb2_tag!=7'd31)
+         begin
+            //$display("OPA IS NOW VALID2\nOPA:%d", lsq_cdb2_tag);
+            st_opa_value[i] <= `SD cdb2_in;
+            st_opa_valid[i] <= `SD 1'b1;
+         end
+      end
+
+      for(i=0; i<8; i=i+1)
+      begin
+         if((st_opb_PRN[i]==lsq_cdb1_tag) && lsq_cdb1_valid && lsq_cdb1_tag!=7'd31)
+         begin
+            //$display("OPB IS NOW VALID1\nOPB:%d", lsq_cdb1_tag);
+            st_opb_value[i] <= `SD cdb1_in;
+            st_opb_valid[i] <= `SD 1'b1;
+         end
+         if((st_opb_PRN[i]==lsq_cdb2_tag) && lsq_cdb2_valid && lsq_cdb2_tag!=7'd31)
+         begin
+            //$display("OPB IS NOW VALID2\nOPB:%d", lsq_cdb2_tag);
+            st_opb_value[i] <= `SD cdb2_in;
+            st_opb_valid[i] <= `SD 1'b1;
+         end
+      end
+
+/*
+      for(i=0; i<8; i=i+1)
+      begin
+         if(st_opa_valid[i] && st_opb_valid[i] && (st_ROB[i]==lsq_commit_ROB1_in) &&
+            lsq_commit_ROB1_valid_in && !st_committed[i])
+         begin
+            //$display("STORE IN THE ROB COMMITTED:%d", i);
+            st_committed[i] <= `SD 1'b1;
+         end
+      end
+*/
+   end
+end // end always
+
+// *** LOAD STATION ***
+ld_entry ld_table [15:0] (// inputs:
+               .clock(clock),
+               .reset(reset | lsq_mispredict1_in | lsq_mispredict2_in),
+
+               .ld_entry_load1_in(ld_load1_in),
+               .ld_entry_load2_in(ld_load2_in),
+
+               .ld_entry_use_enable(ld_use_enable),
+               .ld_entry_mem_value_valid_in(lsq_mem_value_valid_in && !st_address_valid),
+               .ld_entry_mem_addr_invalid_in(lsq_mem_addr_invalid_in && !st_address_valid),
+
+               .ld_entry_cdb1_in(cdb1_in),
+               .ld_entry_cdb1_tag(lsq_cdb1_tag),
+               .ld_entry_cdb1_valid(lsq_cdb1_valid),
+
+               .ld_entry_cdb2_in(cdb2_in),
+               .ld_entry_cdb2_tag(lsq_cdb2_tag),
+               .ld_entry_cdb2_valid(lsq_cdb2_valid),
+
+               .ld_entry_color_commit_in(st_head_pointer),
+               .ld_entry_color_commit_valid_in(st_address_valid),
+
+               .ld_entry_dest_PRN1_in(lsq_dest_PRN1_in),
+               .ld_entry_regb1_in(lsq_opb1_in),
+               .ld_entry_regb1_tag_in(lsq_PRNb1_in),
+               .ld_entry_regb1_valid(lsq_opb1_valid),
+               .ld_entry_ROB1_in(lsq_ROB1_in),
+               .ld_entry_rd_mem1_in(lsq_rd_mem1_in),
+               .ld_entry_IR1_in(lsq_IR1_in),
+               .ld_entry_instr_valid1_in(lsq_instr_valid1_in),
+               .ld_entry_color1_in(st_color1),
+               .ld_entry_no_color1_in((st_head_pointer==st_tail_pointer1) && !lsq_wr_mem1_in),
+
+               .ld_entry_dest_PRN2_in(lsq_dest_PRN2_in),
+               .ld_entry_regb2_in(lsq_opb2_in),
+               .ld_entry_regb2_tag_in(lsq_PRNb2_in),
+               .ld_entry_regb2_valid(lsq_opb2_valid),
+               .ld_entry_IR2_in(lsq_IR2_in),
+               .ld_entry_ROB2_in(lsq_ROB2_in),
+               .ld_entry_rd_mem2_in(lsq_rd_mem2_in),
+               .ld_entry_instr_valid2_in(lsq_instr_valid2_in),
+               .ld_entry_color2_in(st_color1),
+               .ld_entry_no_color2_in((st_head_pointer==st_tail_pointer1) && !lsq_wr_mem1_in),
+
+               // outputs:
+               .ld_entry_avail_out(ld_avail_out),
+               .ld_entry_ready_out(ld_ready_out),
+
+               .ld_entry_dest_tag_out(lsq_dest_PRN_out),
+               .ld_entry_address_out(ld_address_out),
+               .ld_entry_ROB_out(ld_ROB_out),
+               .mem_in_process(mem_in_process)
+              );
+
+// 16 bit PS for load1
+ps16 rs_load1_in_alu_in_ps(
+           .req(ld_avail_out),
+           .en(1'b1),
+           .gnt(ld_load1_in));
+
+// 16 bit PS for load2
+rev_ps16 rs_load2_in_alu_in_ps(
+           .req(ld_avail_out),
+           .en(1'b1),
+           .gnt(ld_load2_in));
+
+// 16 bit PS for use_enable
+ps16 use_en1_alu_ps(
+           .req(ld_ready_out),
+           .en(mem_in_process == 16'b0),
+           .gnt(ld_use_enable));
+
+endmodule

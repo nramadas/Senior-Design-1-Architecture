@@ -1,0 +1,366 @@
+module rename_issue(
+   //inputs
+   clock,
+   reset,
+
+   id_rename_IR1,
+   id_rename_IR2,
+   rename_dest_reg_idx_in1,
+   rename_dest_reg_idx_in2,
+   rename_valid_IR1,
+   rename_valid_IR2,
+  
+   //commit inputs to update PRF Valid Bit(s) for the free register(s), RRAT and Both Free Lists
+   ROB_to_RRAT_PRN1_in,
+   ROB_to_RRAT_ARN1_in,
+   ROB_to_PRF_PRN_old1_in,
+   ROB_to_RRAT_PRN2_in,
+   ROB_to_RRAT_ARN2_in,
+   ROB_to_PRF_PRN_old2_in,
+   ROB_valid1_in,
+   ROB_valid2_in,
+				
+   // ships passing in the night + executed instruction to update PRF      
+  rename_cdb1_in,
+  rename_cdb1_tag,
+  rename_cdb1_valid,
+  rename_cdb2_in,
+  rename_cdb2_tag,
+  rename_cdb2_valid,
+					
+  // if branch misprediction
+  copy1,
+  copy2,
+
+  //outputs to Rename/Out of Order Pipeline Register for issue
+  rename_dest_PRN1_out,
+  rename_opa1_out,
+  rename_PRNa1_out,
+  rename_opa1_valid,
+  rename_opb1_out,
+  rename_PRNb1_out,
+  rename_opb1_valid, 
+
+  rename_dest_PRN2_out,
+  rename_opa2_out,
+  rename_PRNa2_out,
+  rename_opa2_valid,
+  rename_opb2_out,
+  rename_PRNb2_out,
+  rename_opb2_valid
+  );
+   input clock;
+   input reset;
+
+   input [31:0] id_rename_IR1;
+   input [31:0] id_rename_IR2;
+   input [4:0]rename_dest_reg_idx_in1;
+   input [4:0]rename_dest_reg_idx_in2;
+   input   rename_valid_IR1;
+   input   rename_valid_IR2;
+
+   input copy1;
+   input copy2;
+
+   input [63:0] rename_cdb1_in;
+   input [6:0]  rename_cdb1_tag;
+   input        rename_cdb1_valid;
+   input [63:0] rename_cdb2_in;
+   input [6:0]  rename_cdb2_tag;
+   input        rename_cdb2_valid;
+ 
+   input [6:0] ROB_to_RRAT_PRN1_in;
+   input [5:0] ROB_to_RRAT_ARN1_in;
+   input [6:0] ROB_to_PRF_PRN_old1_in;
+   input [6:0] ROB_to_RRAT_PRN2_in;
+   input [5:0] ROB_to_RRAT_ARN2_in;
+   input [6:0] ROB_to_PRF_PRN_old2_in;
+   input       ROB_valid1_in;
+   input       ROB_valid2_in;
+
+   output  [6:0] rename_dest_PRN1_out;
+   output  [63:0] rename_opa1_out;
+   output  [6:0] rename_PRNa1_out;
+   output  rename_opa1_valid;
+   output  [63:0] rename_opb1_out;
+   output  [6:0]  rename_PRNb1_out;
+   output  rename_opb1_valid; 
+
+   output  [6:0] rename_dest_PRN2_out;
+   output  [63:0] rename_opa2_out;
+   output  [6:0] rename_PRNa2_out;
+   output  rename_opa2_valid;
+   output  [63:0] rename_opb2_out;
+   output  [6:0]  rename_PRNb2_out;
+   output  rename_opb2_valid;
+
+
+   reg [95:0] RAT_free_list;
+   reg [95:0] RRAT_free_list;
+   reg [95:0] next_RAT_free_list;
+   reg [95:0] next_RRAT_free_list;
+   wire [95:0] RAT_choose1_list;
+   wire [95:0] RAT_choose2_list;
+
+   reg [6:0] RAT [31:0];
+   reg [6:0] RRAT [31:0];
+   reg [6:0] next_RAT [31:0];
+   reg [6:0] next_RRAT [31:0];
+
+   integer i;
+   integer j;
+   integer x;
+
+   integer i1;
+   integer j1;
+  // Choose values from free list then get the PRN Number
+  ps_96 choose(.req(RAT_free_list), .en(~reset), .gnt(RAT_choose1_list));
+  rev_ps_96 choose1(.req(RAT_free_list), .en(~reset), .gnt(RAT_choose2_list));
+  pe prn_number(.gnt(RAT_choose1_list), .enc(rename_dest_PRN1_out));
+  pe prn_number1(.gnt(RAT_choose2_list), .enc(rename_dest_PRN2_out)); 
+
+  always @*
+  begin
+   /*for(x1 = 0; x1 < 31; x1 = x1 + 1)
+      begin
+         next_RRAT[x1] = RRAT[x1];
+	     next_RAT[x1] = RAT[x1];
+      end
+   next_RAT_free_list = RAT_free_list;
+   next_RRAT_free_list = RRAT_free_list;*/
+  if(copy1 && ROB_valid1_in && ROB_to_RRAT_ARN1_in != `ZERO_REG)
+  begin
+      for(j1 = 0; j1 < 32; j1 = j1 + 1)
+      begin
+         next_RRAT[j1] = RRAT[j1];
+      end 
+      next_RRAT[ROB_to_RRAT_ARN1_in] = ROB_to_RRAT_PRN1_in;
+      for(i1 = 0; i1 < 32; i1 = i1 + 1)
+      begin
+         next_RAT[i1] = next_RRAT[i1];
+      end
+
+      next_RRAT_free_list = RRAT_free_list;
+      next_RRAT_free_list[ROB_to_PRF_PRN_old1_in] = 1'b1;
+      next_RAT_free_list = next_RRAT_free_list;
+      end
+   else if(copy1 && ROB_valid1_in && ROB_to_RRAT_ARN1_in == `ZERO_REG)
+   begin
+      for(j1 = 0; j1 < 32; j1 = j1 + 1)
+      begin
+         next_RRAT[j1] = RRAT[j1];
+      end	  
+	  for(i1 = 0; i1 < 32; i1 = i1 + 1)
+      begin
+         next_RAT[i1] = RRAT[i1];
+      end			
+      next_RAT_free_list = RRAT_free_list;
+	  next_RRAT_free_list = RRAT_free_list;
+   end
+   else if(copy2 && ROB_valid2_in && ROB_to_RRAT_ARN2_in == `ZERO_REG && ROB_valid1_in && ROB_to_RRAT_ARN1_in != `ZERO_REG)
+   begin
+      for(j1 = 0; j1 < 32; j1 = j1 + 1)
+      begin
+         next_RRAT[j1] = RRAT[j1];
+      end
+         next_RRAT[ROB_to_RRAT_ARN1_in] = ROB_to_RRAT_PRN1_in;
+      for(i1 = 0; i1 < 32; i1 = i1 + 1)
+      begin
+         next_RAT[i1] = next_RRAT[i1];
+      end
+				
+      next_RRAT_free_list = RRAT_free_list;
+      next_RRAT_free_list[ROB_to_PRF_PRN_old1_in] = 1'b1;
+      next_RAT_free_list = next_RRAT_free_list;
+   end
+   else if(copy2 && ROB_valid2_in && ROB_to_RRAT_ARN2_in != `ZERO_REG && ROB_valid1_in && ROB_to_RRAT_ARN1_in != `ZERO_REG)
+   begin
+      for(j1 = 0; j1 < 32; j1 = j1 + 1)
+      begin
+         next_RRAT[j1] = RRAT[j1];
+      end
+      next_RRAT[ROB_to_RRAT_ARN1_in] = ROB_to_RRAT_PRN1_in;
+      next_RRAT[ROB_to_RRAT_ARN2_in] = ROB_to_RRAT_PRN2_in;
+      for(i1 = 0; i1 < 32; i1 = i1 + 1)
+      begin
+         next_RAT[i1] = next_RRAT[i1];
+      end
+      next_RRAT_free_list = RRAT_free_list;
+      next_RRAT_free_list[ROB_to_PRF_PRN_old1_in] = 1'b1;
+      next_RRAT_free_list[ROB_to_PRF_PRN_old2_in] = 1'b1;
+      next_RAT_free_list = next_RRAT_free_list;
+   end
+   else if(copy2 && ROB_valid2_in && ROB_to_RRAT_ARN2_in != `ZERO_REG && ROB_valid1_in && ROB_to_RRAT_ARN1_in == `ZERO_REG)
+   begin
+     for(j1 = 0; j1 < 32; j1 = j1 + 1)
+      begin
+         next_RRAT[j1] = RRAT[j1];
+      end
+         next_RRAT[ROB_to_RRAT_ARN2_in] = ROB_to_RRAT_PRN2_in;
+      for(i1 = 0; i1 < 32; i1 = i1 + 1)
+      begin
+         next_RAT[i1] = next_RRAT[i1];
+      end
+				
+      next_RRAT_free_list = RRAT_free_list;
+      next_RRAT_free_list[ROB_to_PRF_PRN_old2_in] = 1'b1;
+      next_RAT_free_list = next_RRAT_free_list;
+   end
+   else if(copy2 && ROB_valid2_in && ROB_to_RRAT_ARN2_in == `ZERO_REG && ROB_valid1_in && ROB_to_RRAT_ARN1_in == `ZERO_REG)
+   begin
+         for(j1 = 0; j1 < 32; j1 = j1 + 1)
+		 begin
+            next_RRAT[j1] = RRAT[j1];
+         end
+		 for(i1 = 0; i1 < 32; i1 = i1 + 1)
+         begin
+            next_RAT[i1] = RRAT[i1];
+         end			
+         next_RAT_free_list = RRAT_free_list;
+		 next_RRAT_free_list = RRAT_free_list;
+   end
+   else
+<<<<<<< .mine
+   begin
+   next_RAT_free_list = RAT_free_list;
+   next_RRAT_free_list = RRAT_free_list;
+=======
+>>>>>>> .r91
+<<<<<<< .mine
+=======
+   begin
+    for(j1 = 0; j1 < 32; j1 = j1 + 1)
+		 begin
+            next_RRAT[j1] = RRAT[j1];
+         end
+		 for(i1 = 0; i1 < 32; i1 = i1 + 1)
+         begin
+            next_RAT[i1] = RRAT[i1];
+         end			
+      next_RAT_free_list = RRAT_free_list;
+	  next_RRAT_free_list = RRAT_free_list;
+>>>>>>> .r91
+    if(ROB_to_RRAT_ARN1_in != `ZERO_REG && ROB_valid1_in)
+      begin	  
+      next_RRAT[ROB_to_RRAT_ARN1_in] = ROB_to_RRAT_PRN1_in;
+      next_RRAT_free_list[ROB_to_PRF_PRN_old1_in] = 1'b1;
+      next_RRAT_free_list[ROB_to_RRAT_PRN1_in] = 1'b0;
+      next_RAT_free_list[ROB_to_PRF_PRN_old1_in] = 1'b1;
+      end
+    if(ROB_to_RRAT_ARN2_in != `ZERO_REG && ROB_valid2_in)
+      begin
+      next_RRAT[ROB_to_RRAT_ARN2_in] = ROB_to_RRAT_PRN2_in;
+      next_RRAT_free_list[ROB_to_PRF_PRN_old2_in] = 1'b1;
+      next_RRAT_free_list[ROB_to_RRAT_PRN2_in] = 1'b0;
+      next_RAT_free_list[ROB_to_PRF_PRN_old2_in] = 1'b1;
+      end
+    if(rename_dest_reg_idx_in1 != `ZERO_REG && rename_valid_IR1)
+      begin
+      next_RAT_free_list[rename_dest_PRN1_out] = 1'b0;
+      next_RAT[rename_dest_reg_idx_in1] = rename_dest_PRN1_out;
+      end
+    if(rename_dest_reg_idx_in2 != `ZERO_REG && rename_valid_IR2)
+      begin
+      next_RAT_free_list[rename_dest_PRN2_out] = 1'b0;
+      next_RAT[rename_dest_reg_idx_in2] = rename_dest_PRN2_out;   
+	  end
+   end
+   end
+
+
+   always @(posedge clock)
+   begin
+   if(reset)       
+   begin
+      for(i = 0; i < 31; i = i + 1)
+      begin
+         RAT_free_list[i] <= `SD 1'b1;
+         RRAT_free_list[i] <= `SD 1'b1;
+      end
+      for(x = 32; x < 96; x = x + 1)
+      begin
+         RAT_free_list[x] <= `SD 1'b1;
+         RRAT_free_list[x] <= `SD 1'b1;
+      end
+      RAT_free_list[31] <= `SD 1'b0;
+      RRAT_free_list[31] <= `SD 1'b0;
+      for(j = 0; j < 32; j = j + 1)
+      begin
+         RAT[j] <= `SD 7'b0;
+         RRAT[j] <= `SD 7'b0;
+      end
+      RAT[31] <= `SD {2'b0,`ZERO_REG};
+      RRAT[31] <= `SD {2'b0,`ZERO_REG};
+   end
+   else// if(copy1 || copy2)
+      begin									
+      for(i = 0; i < 32; i = i + 1)
+      begin
+      RAT[i] <= `SD next_RAT[i];
+      RRAT[i] <= `SD next_RRAT[i];
+      end
+      RAT_free_list <= `SD next_RAT_free_list;
+      RRAT_free_list <= `SD next_RRAT_free_list;
+   end
+   /*else
+      begin
+      if(ROB_to_RRAT_ARN1_in != `ZERO_REG && ROB_valid1_in)
+      begin
+      RRAT[ROB_to_RRAT_ARN1_in] <= `SD ROB_to_RRAT_PRN1_in;
+      RRAT_free_list[ROB_to_PRF_PRN_old1_in] <= `SD 1'b1;
+      RRAT_free_list[ROB_to_RRAT_PRN1_in] <= `SD 1'b0;
+      RAT_free_list[ROB_to_PRF_PRN_old1_in] <= `SD 1'b1;
+      end
+      if(ROB_to_RRAT_ARN2_in != `ZERO_REG && ROB_valid2_in)
+      begin
+      RRAT[ROB_to_RRAT_ARN2_in] <= `SD ROB_to_RRAT_PRN2_in;
+      RRAT_free_list[ROB_to_PRF_PRN_old2_in] <= `SD 1'b1;
+      RRAT_free_list[ROB_to_RRAT_PRN2_in] <= `SD 1'b0;
+      RAT_free_list[ROB_to_PRF_PRN_old2_in] <= `SD 1'b1;
+      end
+      if(rename_dest_reg_idx_in1 != `ZERO_REG && rename_valid_IR1)
+      begin
+      RAT_free_list[rename_dest_PRN1_out] <= `SD 1'b0;
+      RAT[rename_dest_reg_idx_in1] <= `SD rename_dest_PRN1_out;
+      end
+      if(rename_dest_reg_idx_in2 != `ZERO_REG && rename_valid_IR2)
+      begin
+      RAT_free_list[rename_dest_PRN2_out] <= `SD 1'b0;
+      RAT[rename_dest_reg_idx_in2] <= `SD rename_dest_PRN2_out;
+      end
+   end */     
+   end
+					
+
+	//issue, determine PRNs and the values if valid or not, update the outputs...ships passing in the night
+	//what if dest reg of previous instruction equal the read reg of following instruction, need to forward dest reg PRN to read reg
+
+	wire    [4:0] ra_idx = id_rename_IR1[25:21];   // inst operand A register index
+	wire    [4:0] rb_idx = id_rename_IR1[20:16];   // inst operand B register index
+
+	wire    [4:0] ra_idx2 = id_rename_IR2[25:21];   // inst operand A register index
+	wire    [4:0] rb_idx2 = id_rename_IR2[20:16];   // inst operand B register index
+
+	assign rename_PRNa1_out =  RAT[ra_idx];
+	assign rename_PRNb1_out =  RAT[rb_idx];
+
+	assign rename_PRNa2_out =  ((ra_idx2 == rename_dest_reg_idx_in1) && (rename_dest_reg_idx_in1 != `ZERO_REG)) ? rename_dest_PRN1_out : RAT[ra_idx2];
+	assign rename_PRNb2_out =  ((rb_idx2 == rename_dest_reg_idx_in1) && (rename_dest_reg_idx_in1 != `ZERO_REG)) ? rename_dest_PRN1_out : RAT[rb_idx2];
+
+	prf p0(
+			//reads
+			.rda1_idx(rename_PRNa1_out),.rda1_valid_out(rename_opa1_valid), .rda1_out(rename_opa1_out),
+			.rda2_idx(rename_PRNa2_out),.rda2_valid_out(rename_opa2_valid), .rda2_out(rename_opa2_out),
+			.rdb1_idx(rename_PRNb1_out),.rdb1_valid_out(rename_opb1_valid), .rdb1_out(rename_opb1_out),
+			.rdb2_idx(rename_PRNb2_out),.rdb2_valid_out(rename_opb2_valid), .rdb2_out(rename_opb2_out), 
+			//writes
+			.wr_idx1(rename_cdb1_tag), .wr_data1(rename_cdb1_in), .wr_idx2(rename_cdb2_tag),
+			.wr_data2(rename_cdb2_in), .wr_en(rename_cdb1_valid), .wr_en1(rename_cdb2_valid), .wr_en2(ROB_to_RRAT_ARN1_in != `ZERO_REG && ROB_valid1_in), 
+			.wr_en3(ROB_to_RRAT_ARN2_in != `ZERO_REG && ROB_valid2_in), .wr_clk(clock), .wr_valid1(ROB_to_PRF_PRN_old1_in), .wr_valid2(ROB_to_PRF_PRN_old2_in),
+
+			.RRAT_free_list(next_RRAT_free_list), .Branch_Mispredict(copy1 | copy2)
+	   ); 
+
+
+
+endmodule

@@ -1,0 +1,14 @@
+DirectC print_header
+DirectC print_cycles
+DirectC print_another_cycles
+DirectC print_stage
+DirectC print_reg
+DirectC print_rege
+DirectC print_commit
+DirectC print_membus
+DirectC print_close
+DirectC print_new_line
+DirectC print_new_line_reg
+DirectC reg_close
+DirectC check_reset
+DirectC print_reg_header

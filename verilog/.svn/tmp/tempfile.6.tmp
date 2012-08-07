@@ -1,0 +1,602 @@
+module ooc(// inputs:
+          reset,
+          clock,
+
+          // input : instruction 1 from the issue stage
+          is_ooc_dest_PRN1_in,
+          is_ooc_dest_PRN1_old_in,
+          is_ooc_dest_ARN1_in,
+          is_ooc_opa1_in,
+          is_ooc_PRNa1_in,
+          is_ooc_opa1_valid,
+          is_ooc_opb1_in,
+          is_ooc_PRNb1_in,
+          is_ooc_opb1_valid, 
+          is_ooc_cond_branch1_in,
+          is_ooc_uncond_branch1_in,
+          is_ooc_branch_pred1_in,
+          is_ooc_issue_NPC1_in,
+          is_ooc_issue_PC1_in,
+          is_ooc_issue_IR1_in,
+          is_ooc_alu_func1_in,
+          //is_ooc_ROB1_in,
+          is_ooc_opa_select1_in,
+          is_ooc_opb_select1_in,
+          is_ooc_rd_mem1_in,
+          is_ooc_wr_mem1_in,
+          is_ooc_instr_valid1_in,
+
+          // input : instruction 2 from the issue stage
+          is_ooc_dest_PRN2_in,
+          is_ooc_dest_PRN2_old_in,
+          is_ooc_dest_ARN2_in,
+          is_ooc_opa2_in,
+          is_ooc_PRNa2_in,
+          is_ooc_opa2_valid,
+          is_ooc_opb2_in,
+          is_ooc_PRNb2_in,
+          is_ooc_opb2_valid, 
+          is_ooc_cond_branch2_in,
+          is_ooc_uncond_branch2_in,
+          is_ooc_branch_pred2_in,
+          is_ooc_issue_NPC2_in,
+          is_ooc_issue_PC2_in,
+          is_ooc_issue_IR2_in,
+          is_ooc_alu_func2_in,
+          //is_ooc_ROB2_in,
+          is_ooc_opa_select2_in,
+          is_ooc_opb_select2_in,
+          is_ooc_rd_mem2_in,
+          is_ooc_wr_mem2_in,
+          is_ooc_instr_valid2_in,
+
+          // outputs from RS
+          rs_stall_out,
+
+          // output from ROB
+          ROB_stall_out,
+
+          //outputs from alu FU
+          ex_alu1_result_out,
+          ex_alu2_result_out,
+          ex_ROB1_alu_out,
+          ex_ROB2_alu_out,
+          ex_dest_PRN1_alu_out,
+          ex_dest_PRN2_alu_out,
+          ex1_take_branch_out,
+          ex2_take_branch_out,
+
+          alu0_valid_out,
+          alu1_valid_out,
+
+          // output from mult FU
+          ex_mult1_result_out,
+          ex_mult2_result_out,
+          ex_ROB1_mult_out,
+          ex_ROB2_mult_out,
+          ex_dest_PRN1_mult_out,
+          ex_dest_PRN2_mult_out,
+
+          mult0_done,
+          mult1_done,
+
+          // output from ROB
+          ooc_ROB_to_RRAT_PRN1_out,
+          ooc_ROB_to_RRAT_ARN1_out,
+          ooc_ROB_to_PRF_PRN_old1_out,
+          ooc_ROB_to_fetch_target_addr1_out,
+          ooc_ROB_mis_predict1_out,
+          ooc_ROB_valid1_out,
+
+          ooc_ROB_to_RRAT_PRN2_out,
+          ooc_ROB_to_RRAT_ARN2_out,
+          ooc_ROB_to_PRF_PRN_old2_out,
+          ooc_ROB_to_fetch_target_addr2_out,
+          ooc_ROB_mis_predict2_out,
+          ooc_ROB_valid2_out,
+
+          //outputs from CDB to PRF
+          cdb1_result_out,
+          cdb1_PRN_out,
+          cdb1_valid_out,
+
+          cdb2_result_out,
+          cdb2_PRN_out,
+          cdb2_valid_out);
+
+input          reset;                       // reset signal 
+input          clock;                       // the clock 
+
+input   [6:0]  is_ooc_dest_PRN1_in;             // The destination of this instruction 
+input   [6:0]  is_ooc_dest_PRN1_old_in;         // The old destination of this instruction
+input   [4:0]  is_ooc_dest_ARN1_in;
+input  [63:0]  is_ooc_opa1_in;                  // Operand a from Rename  
+input   [6:0]  is_ooc_PRNa1_in;                 // Physical Register Number for opA
+input          is_ooc_opa1_valid;               // Is Opa a Tag or immediate data
+input  [63:0]  is_ooc_opb1_in;                  // Operand a from Rename 
+input   [6:0]  is_ooc_PRNb1_in;                 // Physical Register Number for opB
+input          is_ooc_opb1_valid;               // Is Opb a tag or immediate data
+input          is_ooc_cond_branch1_in;
+input          is_ooc_uncond_branch1_in;
+input          is_ooc_branch_pred1_in;
+input  [63:0]  is_ooc_issue_NPC1_in;            // Next PC from issue stage
+input  [63:0]  is_ooc_issue_PC1_in;             // PC from issue stage
+input  [31:0]  is_ooc_issue_IR1_in;             // instruction from issue stage
+input   [4:0]  is_ooc_alu_func1_in;             // alu opcode from issue stage
+//input   [5:0]  is_ooc_ROB1_in;                  // ROB entry number
+input   [1:0]  is_ooc_opa_select1_in;
+input   [1:0]  is_ooc_opb_select1_in;
+input          is_ooc_rd_mem1_in;
+input          is_ooc_wr_mem1_in;
+input          is_ooc_instr_valid1_in;
+
+input   [6:0]  is_ooc_dest_PRN2_in;             // The destination of this instruction 
+input   [6:0]  is_ooc_dest_PRN2_old_in;         // The old destination of this instruction 
+input   [4:0]  is_ooc_dest_ARN2_in;
+input  [63:0]  is_ooc_opa2_in;                  // Operand a from Rename  
+input   [6:0]  is_ooc_PRNa2_in;                 // Physical Register Number for opA
+input          is_ooc_opa2_valid;               // Is Opa a Tag or immediate data
+input  [63:0]  is_ooc_opb2_in;                  // Operand a from Rename 
+input   [6:0]  is_ooc_PRNb2_in;                 // Physical Register Number for opB
+input          is_ooc_opb2_valid;               // Is Opb a tag or immediate data
+input          is_ooc_cond_branch2_in;
+input          is_ooc_uncond_branch2_in;
+input          is_ooc_branch_pred2_in;
+input  [63:0]  is_ooc_issue_NPC2_in;            // Next PC from issue stage
+input  [63:0]  is_ooc_issue_PC2_in;             // PC from issue stage
+input  [31:0]  is_ooc_issue_IR2_in;             // instruction from issue stage
+input   [4:0]  is_ooc_alu_func2_in;             // alu opcode from issue stage
+//input   [5:0]  is_ooc_ROB2_in;                  // ROB entry number
+input   [1:0]  is_ooc_opa_select2_in;
+input   [1:0]  is_ooc_opb_select2_in;
+input          is_ooc_rd_mem2_in;
+input          is_ooc_wr_mem2_in;
+input          is_ooc_instr_valid2_in;
+
+output         rs_stall_out;
+output         ROB_stall_out;
+
+output [63:0]  ex_alu1_result_out;
+output  [5:0]  ex_ROB1_alu_out;
+output  [6:0]  ex_dest_PRN1_alu_out;
+output [63:0]  ex_alu2_result_out;
+output  [5:0]  ex_ROB2_alu_out;
+output  [6:0]  ex_dest_PRN2_alu_out;
+output         ex1_take_branch_out;  // is this a taken branch?
+output         ex2_take_branch_out;
+
+output         alu0_valid_out;
+output         alu1_valid_out;
+
+output [63:0]  ex_mult1_result_out;
+output  [5:0]  ex_ROB1_mult_out;
+output  [6:0]  ex_dest_PRN1_mult_out;
+output [63:0]  ex_mult2_result_out;
+output  [5:0]  ex_ROB2_mult_out;
+output  [6:0]  ex_dest_PRN2_mult_out;
+
+output         mult0_done;
+output         mult1_done;
+
+output  [6:0]  ooc_ROB_to_RRAT_PRN1_out;
+output  [4:0]  ooc_ROB_to_RRAT_ARN1_out;
+output  [6:0]  ooc_ROB_to_PRF_PRN_old1_out;
+output [63:0]  ooc_ROB_to_fetch_target_addr1_out;
+output         ooc_ROB_mis_predict1_out;
+output         ooc_ROB_valid1_out;
+
+output  [6:0]  ooc_ROB_to_RRAT_PRN2_out;
+output  [4:0]  ooc_ROB_to_RRAT_ARN2_out;
+output  [6:0]  ooc_ROB_to_PRF_PRN_old2_out;
+output [63:0]  ooc_ROB_to_fetch_target_addr2_out;
+output         ooc_ROB_mis_predict2_out;
+output         ooc_ROB_valid2_out;
+
+output [63:0]  cdb1_result_out;
+output  [6:0]  cdb1_PRN_out;
+output         cdb1_valid_out;
+
+output [63:0]  cdb2_result_out;
+output  [6:0]  cdb2_PRN_out;
+output         cdb2_valid_out;
+
+// These are intermediate wire from RS to FU
+// input wire from CDB to multiplier FU
+wire           cdb_alu_enable1;
+wire           cdb_alu_enable2;
+
+// output wire from multiplier FU
+wire   [63:0]  rs_opa1_alu_out;             // This RS' opa 
+wire   [63:0]  rs_opb1_alu_out;             // This RS' opb 
+wire    [6:0]  rs_dest_PRN1_alu_out;        // This RS' destination tag  
+wire           rs_cond_branch1_alu_out;
+wire           rs_uncond_branch1_alu_out;
+wire   [63:0]  rs_NPC1_alu_out;             // PC+4 to EX for target address
+wire   [31:0]  rs_IR1_alu_out;
+wire    [4:0]  rs_alu_func1_alu_out;
+wire    [5:0]  rs_ROB1_alu_out;             // ROB number passed into the FU
+wire    [1:0]  rs_opa_select1_alu_out;
+wire    [1:0]  rs_opb_select1_alu_out;
+wire           rs_instr_valid1_alu_out;
+
+wire   [63:0]  rs_opa2_alu_out;             // This RS' opa 
+wire   [63:0]  rs_opb2_alu_out;             // This RS' opb 
+wire    [6:0]  rs_dest_PRN2_alu_out;        // This RS' destination tag  
+wire           rs_cond_branch2_alu_out;
+wire           rs_uncond_branch2_alu_out;
+wire   [63:0]  rs_NPC2_alu_out;             // PC+4 to EX for target address
+wire   [31:0]  rs_IR2_alu_out;
+wire    [4:0]  rs_alu_func2_alu_out;
+wire    [5:0]  rs_ROB2_alu_out;             // ROB number passed into the FU
+wire    [1:0]  rs_opa_select2_alu_out;
+wire    [1:0]  rs_opb_select2_alu_out;
+wire           rs_instr_valid2_alu_out;
+
+// input wire from CDB to multiplier FU
+wire           cdb_mult_enable1;
+wire           cdb_mult_enable2;
+
+// output wire from multiplier FU
+wire   [63:0]  rs_opa1_mult_out;            // This RS' opa 
+wire   [63:0]  rs_opb1_mult_out;            // This RS' opb 
+wire    [6:0]  rs_dest_PRN1_mult_out;       // This RS' destination tag  
+wire           rs_cond_branch1_mult_out;
+wire           rs_uncond_branch1_mult_out;
+wire   [63:0]  rs_NPC1_mult_out;            // PC+4 to EX for target address
+wire   [31:0]  rs_IR1_mult_out;
+wire    [4:0]  rs_alu_func1_mult_out;
+wire    [5:0]  rs_ROB1_mult_out;            // ROB number passed into the FU
+wire           rs_instr_valid1_mult_out;
+
+wire   [63:0]  rs_opa2_mult_out;            // This RS' opa 
+wire   [63:0]  rs_opb2_mult_out;            // This RS' opb 
+wire    [6:0]  rs_dest_PRN2_mult_out;       // This RS' destination tag  
+wire           rs_cond_branch2_mult_out;
+wire           rs_uncond_branch2_mult_out;
+wire   [63:0]  rs_NPC2_mult_out;            // PC+4 to EX for target address
+wire   [31:0]  rs_IR2_mult_out;
+wire    [4:0]  rs_alu_func2_mult_out;
+wire    [5:0]  rs_ROB2_mult_out;            // ROB number passed into the FU
+wire           rs_instr_valid2_mult_out;
+
+wire   [63:0]  ex_lsq1_result_out;
+wire    [5:0]  ex_ROB1_lsq_out;
+wire    [6:0]  ex_dest_PRN1_lsq_out;
+wire   [63:0]  ex_lsq2_result_out;
+wire    [5:0]  ex_ROB2_lsq_out;
+wire    [6:0]  ex_dest_PRN2_lsq_out;
+wire           ex_lsq0_valid_out;
+wire           ex_lsq1_valid_out;
+
+wire    [5:0]  cdb1_ROB_out;                // ROB num from CDB to ROB
+wire    [5:0]  cdb2_ROB_out;                // These are needed to EX done
+
+wire    [5:0]  ROB_num1_to_RS_out;
+wire    [5:0]  ROB_num2_to_RS_out;
+
+wire   [63:0]  cdb1_result_out;             // result 1 from CDB  
+wire    [6:0]  cdb1_PRN_out;                // PRN 1 from CDB 
+wire           cdb1_valid_out;              // valid data bit from CDB
+wire           cdb1_take_branch;
+
+wire   [63:0]  cdb2_result_out;             // result 1 from CDB  
+wire    [6:0]  cdb2_PRN_out;                // PRN 1 from CDB 
+wire           cdb2_valid_out;              // valid data bit from CDB
+wire           cdb2_take_branch;
+
+wire    [5:0]  disable_vector;
+wire           ROB_stall_out;
+
+assign cdb_mult_enable1 = ~disable_vector[3];
+assign cdb_mult_enable2 = ~disable_vector[2];
+assign cdb_alu_enable1  = ~disable_vector[1];
+assign cdb_alu_enable2  = ~disable_vector[0];
+
+assign ex_lsq1_result_out=64'b0;
+assign ex_ROB1_lsq_out=6'b0;
+assign ex_dest_PRN1_lsq_out=7'b0;
+assign ex_lsq2_result_out=64'b0;
+assign ex_ROB2_lsq_out=6'b0;
+assign ex_dest_PRN2_lsq_out=7'b0;
+assign ex_lsq0_valid_out=1'b0;
+assign ex_lsq1_valid_out=1'b0;
+
+rs rs32(// inputs:
+          .reset(reset),
+          .clock(clock),
+
+          .rs_mult_free1_in(cdb_mult_enable1),
+          .rs_mult_free2_in(cdb_mult_enable2),
+          .rs_alu_free1_in(cdb_alu_enable1),
+          .rs_alu_free2_in(cdb_alu_enable2),
+
+          // instruction 1 from the issue stage
+          .rs_dest_PRN1_in(is_ooc_dest_PRN1_in),
+          .rs_opa1_in(is_ooc_opa1_in),
+          .rs_PRNa1_in(is_ooc_PRNa1_in),
+          .rs_opa1_valid(is_ooc_opa1_valid),
+          .rs_opb1_in(is_ooc_opb1_in),
+          .rs_PRNb1_in(is_ooc_PRNb1_in),
+          .rs_opb1_valid(is_ooc_opb1_valid), 
+          .rs_cdb1_in(cdb1_result_out),                // data from CDB
+          .rs_cdb1_tag(cdb1_PRN_out),                  // PRN from CDB
+          .rs_cdb1_valid(cdb1_valid_out),              // data valid bit from CDB
+          .rs_cond_branch1_in(is_ooc_cond_branch1_in),
+          .rs_uncond_branch1_in(is_ooc_uncond_branch1_in),
+          .rs_issue_NPC1_in(is_ooc_issue_NPC1_in),
+          .rs_issue_IR1_in(is_ooc_issue_IR1_in),
+          .rs_alu_func1_in(is_ooc_alu_func1_in),
+          .rs_ROB1_in(ROB_num1_to_RS_out),
+          .rs_opa_select1_in(is_ooc_opa_select1_in),
+          .rs_opb_select1_in(is_ooc_opb_select1_in),
+          .rs_rd_mem1_in(is_ooc_rd_mem1_in),
+          .rs_wr_mem1_in(is_ooc_wr_mem1_in),
+          .rs_instr_valid1_in(is_ooc_instr_valid1_in),
+
+          // instruction 2 from the issue stage
+          .rs_dest_PRN2_in(is_ooc_dest_PRN2_in),
+          .rs_opa2_in(is_ooc_opa2_in),
+          .rs_PRNa2_in(is_ooc_PRNa2_in),
+          .rs_opa2_valid(is_ooc_opa2_valid),
+          .rs_opb2_in(is_ooc_opb2_in),
+          .rs_PRNb2_in(is_ooc_PRNb2_in),
+          .rs_opb2_valid(is_ooc_opb2_valid), 
+          .rs_cdb2_in(cdb2_result_out),                // data from CDB
+          .rs_cdb2_tag(cdb2_PRN_out),                  // PRN from CDB
+          .rs_cdb2_valid(cdb2_valid_out),              // data valid bit from CDB
+          .rs_cond_branch2_in(is_ooc_cond_branch2_in),
+          .rs_uncond_branch2_in(is_ooc_uncond_branch2_in),
+          .rs_issue_NPC2_in(is_ooc_issue_NPC2_in),
+          .rs_issue_IR2_in(is_ooc_issue_IR2_in),
+          .rs_alu_func2_in(is_ooc_alu_func2_in),
+          .rs_ROB2_in(ROB_num2_to_RS_out),
+          .rs_opa_select2_in(is_ooc_opa_select2_in),
+          .rs_opb_select2_in(is_ooc_opb_select2_in),
+          .rs_rd_mem2_in(is_ooc_rd_mem2_in),
+          .rs_wr_mem2_in(is_ooc_wr_mem2_in),
+          .rs_instr_valid2_in(is_ooc_instr_valid2_in),
+
+          // outputs:
+          .rs_stall_out(rs_stall_out),
+
+          // instruction 1 to alu
+          .rs_opa1_alu_out(rs_opa1_alu_out),
+          .rs_opb1_alu_out(rs_opb1_alu_out),
+          .rs_dest_PRN1_alu_out(rs_dest_PRN1_alu_out),
+          .rs_cond_branch1_alu_out(rs_cond_branch1_alu_out),
+          .rs_uncond_branch1_alu_out(rs_uncond_branch1_alu_out),
+          .rs_NPC1_alu_out(rs_NPC1_alu_out), 
+          .rs_IR1_alu_out(rs_IR1_alu_out),
+          .rs_alu_func1_alu_out(rs_alu_func1_alu_out),
+          .rs_ROB1_alu_out(rs_ROB1_alu_out),
+          .rs_opa_select1_alu_out(rs_opa_select1_alu_out),
+          .rs_opb_select1_alu_out(rs_opb_select1_alu_out),
+          .rs_instr_valid1_alu_out(rs_instr_valid1_alu_out),
+
+          // instruction 2 to alu
+          .rs_opa2_alu_out(rs_opa2_alu_out),
+          .rs_opb2_alu_out(rs_opb2_alu_out),
+          .rs_dest_PRN2_alu_out(rs_dest_PRN2_alu_out),
+          .rs_cond_branch2_alu_out(rs_cond_branch2_alu_out),
+          .rs_uncond_branch2_alu_out(rs_uncond_branch2_alu_out),
+          .rs_NPC2_alu_out(rs_NPC2_alu_out), 
+          .rs_IR2_alu_out(rs_IR2_alu_out),
+          .rs_alu_func2_alu_out(rs_alu_func2_alu_out),
+          .rs_ROB2_alu_out(rs_ROB2_alu_out),
+          .rs_opa_select2_alu_out(rs_opa_select2_alu_out),
+          .rs_opb_select2_alu_out(rs_opb_select2_alu_out),
+          .rs_instr_valid2_alu_out(rs_instr_valid2_alu_out),
+
+          // instruction 1 to mult
+          .rs_opa1_mult_out(rs_opa1_mult_out),
+          .rs_opb1_mult_out(rs_opb1_mult_out),
+          .rs_dest_PRN1_mult_out(rs_dest_PRN1_mult_out),
+          .rs_cond_branch1_mult_out(rs_cond_branch1_mult_out),
+          .rs_uncond_branch1_mult_out(rs_uncond_branch1_mult_out),
+          .rs_NPC1_mult_out(rs_NPC1_mult_out), 
+          .rs_IR1_mult_out(rs_IR1_mult_out),
+          .rs_alu_func1_mult_out(rs_alu_func1_mult_out),
+          .rs_ROB1_mult_out(rs_ROB1_mult_out),
+          .rs_instr_valid1_mult_out(rs_instr_valid1_mult_out),
+
+          // instruction 2 to mult
+          .rs_opa2_mult_out(rs_opa2_mult_out),
+          .rs_opb2_mult_out(rs_opb2_mult_out),
+          .rs_dest_PRN2_mult_out(rs_dest_PRN2_mult_out),
+          .rs_cond_branch2_mult_out(rs_cond_branch2_mult_out),
+          .rs_uncond_branch2_mult_out(rs_uncond_branch2_mult_out),
+          .rs_NPC2_mult_out(rs_NPC2_mult_out),
+          .rs_IR2_mult_out(rs_IR2_mult_out),
+          .rs_alu_func2_mult_out(rs_alu_func2_mult_out),
+          .rs_ROB2_mult_out(rs_ROB2_mult_out),
+          .rs_instr_valid2_mult_out(rs_instr_valid2_mult_out));
+
+ex_alu aluFU(// Inputs
+          .clock(clock),
+          .reset(reset),
+
+          .alu0_disable(~cdb_alu_enable1),
+          .alu1_disable(~cdb_alu_enable2),
+
+          // instruction 1 to alu
+          .ex_opa1_alu_in(rs_opa1_alu_out),
+          .ex_opb1_alu_in(rs_opb1_alu_out),
+          .ex_dest_PRN1_alu_in(rs_dest_PRN1_alu_out),
+          .ex_cond_branch1_alu_in(rs_cond_branch1_alu_out),
+          .ex_uncond_branch1_alu_in(rs_uncond_branch1_alu_out),
+          .ex_NPC1_alu_in(rs_NPC1_alu_out), 
+          .ex_IR1_alu_in(rs_IR1_alu_out),
+          .ex_alu_func1_alu_in(rs_alu_func1_alu_out),
+          .ex_ROB1_alu_in(rs_ROB1_alu_out),
+          .ex_opa1_select(rs_opa_select1_alu_out),
+          .ex_opb1_select(rs_opb_select1_alu_out),
+
+          // instruction 2 to alu
+          .ex_opa2_alu_in(rs_opa2_alu_out),
+          .ex_opb2_alu_in(rs_opb2_alu_out),
+          .ex_dest_PRN2_alu_in(rs_dest_PRN2_alu_out),
+          .ex_cond_branch2_alu_in(rs_cond_branch2_alu_out),
+          .ex_uncond_branch2_alu_in(rs_uncond_branch2_alu_out),
+          .ex_NPC2_alu_in(rs_NPC2_alu_out), 
+          .ex_IR2_alu_in(rs_IR2_alu_out),
+          .ex_alu_func2_alu_in(rs_alu_func2_alu_out),
+          .ex_ROB2_alu_in(rs_ROB2_alu_out),
+          .ex_opa2_select(rs_opa_select2_alu_out),
+          .ex_opb2_select(rs_opb_select2_alu_out),
+
+          .alu0_valid_in(rs_instr_valid1_alu_out),
+          .alu1_valid_in(rs_instr_valid2_alu_out),
+
+          //outputs
+          .ex_alu1_result_out(ex_alu1_result_out),
+          .ex_alu2_result_out(ex_alu2_result_out),
+          .ex_ROB1_alu_out(ex_ROB1_alu_out),
+          .ex_ROB2_alu_out(ex_ROB2_alu_out),
+          .ex_dest_PRN1_alu_out(ex_dest_PRN1_alu_out),
+          .ex_dest_PRN2_alu_out(ex_dest_PRN2_alu_out),
+          .ex1_take_branch_out(ex1_take_branch_out),
+          .ex2_take_branch_out(ex2_take_branch_out),
+
+          .alu0_valid_out(alu0_valid_out),
+          .alu1_valid_out(alu1_valid_out));
+
+ex_mult multFU(//inputs
+          .clock(clock),
+          .reset(reset),
+          .mult1_stall(~cdb_mult_enable1),
+          .mult0_stall(~cdb_mult_enable2),
+
+          // instruction 1 to mult
+          .ex_opa1_mult_in(rs_opa1_mult_out),
+          .ex_opb1_mult_in(rs_opb1_mult_out),
+          .ex_dest_PRN1_mult_in(rs_dest_PRN1_mult_out),
+          .ex_cond_branch1_mult_in(rs_cond_branch1_mult_out),
+          .ex_uncond_branch1_mult_in(rs_uncond_branch1_mult_out),
+          .ex_NPC1_mult_in(rs_NPC1_mult_out), 
+          .ex_IR1_mult_in(rs_IR1_mult_out),
+          .ex_alu_func1_mult_in(rs_alu_func1_mult_out),
+          .ex_ROB1_mult_in(rs_ROB1_mult_out),
+          .ex_valid1(rs_instr_valid1_mult_out),
+
+          // instruction 2 to mult
+          .ex_opa2_mult_in(rs_opa2_mult_out),
+          .ex_opb2_mult_in(rs_opb2_mult_out),
+          .ex_dest_PRN2_mult_in(rs_dest_PRN2_mult_out),
+          .ex_cond_branch2_mult_in(rs_cond_branch2_mult_out),
+          .ex_uncond_branch2_mult_in(rs_uncond_branch2_mult_out),
+          .ex_NPC2_mult_in(rs_NPC2_mult_out), 
+          .ex_IR2_mult_in(rs_IR2_mult_out),
+          .ex_alu_func2_mult_in(rs_alu_func2_mult_out),
+          .ex_ROB2_mult_in(rs_ROB2_mult_out),
+          .ex_valid2(rs_instr_valid2_mult_out),
+
+          //outputs
+          .ex_mult1_result_out(ex_mult1_result_out),
+          .ex_mult2_result_out(ex_mult2_result_out),
+          .ex_ROB1_mult_out(ex_ROB1_mult_out),
+          .ex_ROB2_mult_out(ex_ROB2_mult_out),
+          .ex_dest_PRN1_mult_out(ex_dest_PRN1_mult_out),
+          .ex_dest_PRN2_mult_out(ex_dest_PRN2_mult_out),
+
+          .mult0_done(mult0_done),
+          .mult1_done(mult1_done));
+
+ROB ROB64(
+          // inputs:
+          .reset(reset),
+          .clock(clock),
+
+          .ROB_NPC1_in(is_ooc_issue_NPC1_in),
+          .ROB_PC1_in(is_ooc_issue_PC1_in),
+          .ROB_dest_PRN1_in(is_ooc_dest_PRN1_in),
+          .ROB_dest_PRN_old1_in(is_ooc_dest_PRN1_old_in),
+          .ROB_dest_ARN1_in(is_ooc_dest_ARN1_in),
+          .ROB_br_pred1_in(is_ooc_branch_pred1_in),
+          .ROB_br_actual1_in(cdb1_take_branch),
+          .ROB_target_addr1_in(ex_alu1_result_out),
+          .ROB_num1_in(cdb1_ROB_out),
+          .ROB_valid1_in(cdb1_valid_out),
+          .ROB_wr_mem1_in(is_ooc_wr_mem1_in),
+          .ROB_instr_valid1_in(is_ooc_instr_valid1_in),
+
+          .ROB_NPC2_in(is_ooc_issue_NPC2_in),
+          .ROB_PC2_in(is_ooc_issue_PC2_in),
+          .ROB_dest_PRN2_in(is_ooc_dest_PRN2_in),
+          .ROB_dest_PRN_old2_in(is_ooc_dest_PRN2_old_in),
+          .ROB_dest_ARN2_in(is_ooc_dest_ARN2_in),
+          .ROB_br_pred2_in(is_ooc_branch_pred2_in),
+          .ROB_br_actual2_in(cdb2_take_branch),
+          .ROB_target_addr2_in(ex_alu2_result_out),
+          .ROB_num2_in(cdb2_ROB_out),
+          .ROB_valid2_in(cdb2_valid_out),
+          .ROB_wr_mem2_in(is_ooc_wr_mem2_in),
+          .ROB_instr_valid2_in(is_ooc_instr_valid2_in),
+
+          // outputs:
+          .ROB_to_RRAT_PRN1_out(ooc_ROB_to_RRAT_PRN1_out),
+          .ROB_to_RRAT_ARN1_out(ooc_ROB_to_RRAT_ARN1_out),
+          .ROB_to_PRF_PRN_old1_out(ooc_ROB_to_PRF_PRN_old1_out),
+          .ROB_to_fetch_target_addr1_out(ooc_ROB_to_fetch_target_addr1_out),
+          .ROB_mis_predict1_out(ooc_ROB_mis_predict1_out),
+          .ROB_valid1_out(ooc_ROB_valid1_out),
+          .next_ROB_num1_to_is_out(ROB_num1_to_RS_out),
+
+          .ROB_to_RRAT_PRN2_out(ooc_ROB_to_RRAT_PRN2_out),
+          .ROB_to_RRAT_ARN2_out(ooc_ROB_to_RRAT_ARN2_out),
+          .ROB_to_PRF_PRN_old2_out(ooc_ROB_to_PRF_PRN_old2_out),
+          .ROB_to_fetch_target_addr2_out(ooc_ROB_to_fetch_target_addr2_out),
+          .ROB_mis_predict2_out(ooc_ROB_mis_predict2_out),
+          .ROB_valid2_out(ooc_ROB_valid2_out),
+          .next_ROB_num2_to_is_out(ROB_num2_to_RS_out),
+
+          .ROB_stall_out(ROB_stall_out));
+
+cdb CDB1(  //inputs
+          .clock(clock),
+          .reset(reset),
+
+          .cdb_alu1_result_in(ex_alu1_result_out),
+          .cdb_alu2_result_in(ex_alu2_result_out),
+          .cdb_ROB1_alu_in(ex_ROB1_alu_out),
+          .cdb_ROB2_alu_in(ex_ROB2_alu_out),
+          .cdb_dest_PRN1_alu_in(ex_dest_PRN1_alu_out),
+          .cdb_dest_PRN2_alu_in(ex_dest_PRN2_alu_out),
+          .alu0_valid(alu0_valid_out),
+          .alu1_valid(alu1_valid_out),
+
+          .cdb_mult1_result_in(ex_mult1_result_out),
+          .cdb_mult2_result_in(ex_mult2_result_out),
+          .cdb_ROB1_mult_in(ex_ROB1_mult_out),
+          .cdb_ROB2_mult_in(ex_ROB2_mult_out),
+          .cdb_dest_PRN1_mult_in(ex_dest_PRN1_mult_out),
+          .cdb_dest_PRN2_mult_in(ex_dest_PRN2_mult_out),
+          .cdb1_take_branch_in(ex1_take_branch_out),
+          .cdb2_take_branch_in(ex2_take_branch_out),
+          .mult0_done(mult0_done),
+          .mult1_done(mult1_done),
+
+          .cdb_lsq1_result_in(ex_lsq1_result_out),
+          .cdb_ROB1_lsq_in(ex_ROB1_lsq_out),
+          .cdb_dest_PRN1_lsq_in(ex_dest_PRN1_lsq_out),
+          .cdb_lsq2_result_in(ex_lsq2_result_out),
+          .cdb_ROB2_lsq_in(ex_ROB2_lsq_out),
+          .cdb_dest_PRN2_lsq_in(ex_dest_PRN2_lsq_out),
+          .lsq0_valid(ex_lsq0_valid_out),
+          .lsq1_valid(ex_lsq1_valid_out),
+
+          //outputs
+          .cdb1_result_out(cdb1_result_out),
+          .cdb1_ROB_out(cdb1_ROB_out),
+          .cdb1_PRN_out(cdb1_PRN_out),
+          .cdb1_take_branch(cdb1_take_branch),
+          .cdb1_valid_out(cdb1_valid_out),
+
+          .cdb2_result_out(cdb2_result_out),
+          .cdb2_ROB_out(cdb2_ROB_out),
+          .cdb2_PRN_out(cdb2_PRN_out),
+          .cdb2_take_branch(cdb2_take_branch),
+          .cdb2_valid_out(cdb2_valid_out),
+
+          .next_disable_vector(disable_vector));
+
+endmodule

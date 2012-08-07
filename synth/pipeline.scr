@@ -1,0 +1,197 @@
+/***********************************************************/
+/*   FILE        : defaults.scr                            */
+/*   Description : Default Synopsys Design Compiler Script */
+/*   Usage       : dc_shell -f default.scr                 */
+/*   You'll need to minimally set design_name & read files */
+/***********************************************************/
+
+/***********************************************************/
+/* The following five lines must be updated for every      */
+/* new design                                              */
+/***********************************************************/
+read -f verilog { "../sys_defs.vh" "../verilog/pipeline.v" "../verilog/if_stage.v" "../verilog/id_stage.v" "../verilog/ex_stage.v" "../verilog/mem_stage.v" "../verilog/wb_stage.v" "../verilog/regfile.v" "../verilog/icache.v"}
+design_name = pipeline
+clock_name  = clock
+reset_name  = reset
+CLK_PERIOD  = 30
+
+
+/***********************************************************/
+/* The rest of this file may be left alone for most small  */
+/* to moderate sized designs.  You may need to alter it    */
+/* when synthesizing your final project.                   */
+/***********************************************************/
+SYN_DIR = ./
+search_path =  "/afs/engin.umich.edu/caen/generic/mentor_lib-D.1/public/eecs470/synopsys/";
+target_library = "lec25dscc25_TT.db" ;
+
+link_library = "*" + target_library;
+
+/***********************************************************/
+/* Set some flags for optimisation */
+
+compile_top_all_paths = "true"     
+auto_wire_load_selection = "false"
+
+
+/***********************************************************/
+/*  Clk Periods/uncertainty/transition                     */
+
+CLK_TRANSITION  = 0.1 /* Clock rise transition */
+CLK_UNCERTAINTY = 0.1 /* Clock skew within design */
+CLK_LATENCY     = 0.1 /* Clock propagation delay at current design location */
+
+/* Input/output Delay values */
+AVG_INPUT_DELAY  = 0.1 /* Unrealisticly low */
+AVG_OUTPUT_DELAY = 0.1 /* Unrealisticly low */
+
+/* Critical Range (ns) */
+CRIT_RANGE = 1.0
+
+/***********************************************************/
+/* Design Constrains: Not all used                         */
+MAX_TRANSITION = 1.0
+FAST_TRANSITION = 0.1
+MAX_FANOUT = 32
+MID_FANOUT = 8 
+LOW_FANOUT = 1 
+HIGH_DRIVE = 0
+HIGH_LOAD = 1.0
+AVG_LOAD = 0.1
+AVG_FANOUT_LOAD = 10
+
+/***********************************************************/
+/*BASIC_INPUT = cb18os120_tsmc_max/nd02d1/A1
+BASIC_OUTPUT = cb18os120_tsmc_max/nd02d1/ZN*/
+
+DRIVING_CELL = dffacs1
+
+/* DONT_USE_LIST = {   } */
+
+/*************operation cons**************/
+/*OP_WCASE = WCCOM;
+OP_BCASE = BCCOM;*/
+WIRE_LOAD = "tsmcwire"
+LOGICLIB = lec25dscc25_TT;
+/*****************************/
+
+/* Sourcing the file that sets the Search path and the libraries(target,link) */
+
+sys_clk = clock_name
+
+netlist_file = SYN_DIR + design_name + ".vg"
+db_file      = SYN_DIR + design_name + ".db"
+rep_file     = SYN_DIR + design_name + ".rep"
+chk_file     = SYN_DIR + design_name + ".chk"
+
+/* if we didnt find errors at this point, run */
+if (dc_shell_status != {}) {
+			  
+    current_design = design_name
+    
+    link
+    
+    set_wire_load_model -name WIRE_LOAD -lib LOGICLIB design_name
+    set_wire_load_mode top
+    
+    /* set_operating_conditions OP_WCASE */
+    /* set_dont_use DONT_USE_LIST */
+
+    set_fix_multiple_port_nets -outputs -buffer_constants
+
+    /*** Setting the constraints for explorating the design ***/
+
+    /*** Creating the clock in the module ***/
+    create_clock -period CLK_PERIOD -name sys_clk find(port, sys_clk) 
+    set_clock_uncertainty CLK_UNCERTAINTY sys_clk
+    /* DC is now smart enough that the following two */
+    /*  lines are not needed (as of version 2000.05) */
+    /* set_drive 0 find(port, sys_clk) */
+    /* set_dont_touch_network sys_clk  */
+
+    /* Insert buffers as needed to meet hold-time constraints */
+    set_fix_hold sys_clk
+
+    /* Make additional path groups */
+    group_path -from all_inputs() -name input_grp
+    group_path -to all_outputs() -name output_grp
+
+    set_driving_cell -lib_cell DRIVING_CELL all_inputs()
+    remove_driving_cell find(port, sys_clk)
+
+    set_fanout_load AVG_FANOUT_LOAD all_outputs()
+    set_load AVG_LOAD all_outputs()
+    
+    /* Average input & output delays */
+    set_input_delay AVG_INPUT_DELAY -clock sys_clk all_inputs()
+    remove_input_delay -clock sys_clk find(port, sys_clk)
+    set_output_delay AVG_OUTPUT_DELAY -clock sys_clk all_outputs()
+
+    /* Making reset_name an ideal net */
+    set_dont_touch reset_name
+    set_resistance 0 reset_name
+    set_drive 0 reset_name
+
+    /*** Setting a critical range on all the default path groups , to force the DC
+    /** to optimize all the violating paths within critical range from the worst
+    /** violator in the path group. ***/
+    set_critical_range CRIT_RANGE current_design 
+
+
+    /*****************************************/
+    /* Now set additional design constraints */
+    /*****************************************/
+
+    /* Constrain timing on combinational outputs */
+    set_max_delay CLK_PERIOD all_outputs();
+
+    /* Constrain max fan-out to min(MAX_FANOUT, lib's fanout) Units */
+    max_fanout = MAX_FANOUT
+
+    /* Constrain max transition to min(MAX_TRANSITION, lib's max transition) */
+    max_transition = MAX_TRANSITION
+
+    /* Setting the area constraints */
+    /* set_max_area 0 */
+
+    
+    /**********************************/
+    /*    Set Compile options         */
+    /**********************************/
+    uniquify
+    ungroup -all -flatten
+   
+    /* Make sure the design works */
+    check_design > chk_file
+    
+    /**********************************/
+    /*   Do the actual compilation    */
+    /**********************************/
+    compile -map_effort low
+
+
+    /* Writing out verilog Netlist and db files */
+    write -hier -format verilog -output netlist_file design_name
+    write -hier -format db -output db_file design_name
+
+    /** Generating the design reports for record purposes **/
+    report_design -nosplit > rep_file
+    report_area >> rep_file
+
+    /* Add the Report timing part */
+    report_timing -max_paths 2 -input_pins -nets -transition_time -nosplit >> rep_file
+    report_constraint -all_violators -verbose -nosplit >> rep_file 
+
+    /* Now removing design & Reading in Netlist for Flat report reference */
+    remove_design -all
+    read -format verilog netlist_file
+    current_design = design_name
+    /* ungroup -flatten -all */
+    report_reference -nosplit >> rep_file
+
+    quit
+
+} else {
+    quit
+}
+

@@ -1,0 +1,433 @@
+//////////////////////////////////////////////////////////////////////////
+//                                                                      //
+//   Modulename :  ex_stage.v                                           //
+//                                                                      //
+//                                                                      //
+//                                                                      //
+//////////////////////////////////////////////////////////////////////////
+
+`timescale 1ns/100ps
+
+//
+// The ALU
+//
+// given the command code CMD and proper operands A and B, compute the
+// result of the instruction
+//
+// This module is purely combinational
+//
+module alu(//Inputs
+           opa,
+           opb,
+           func,
+           
+           // Output
+           result
+          );
+
+  input  [63:0] opa;
+  input  [63:0] opb;
+  input   [4:0] func;
+  output [63:0] result;
+
+  reg    [63:0] result;
+
+    // This function computes a signed less-than operation
+  function signed_lt;
+    input [63:0] a, b;
+    
+    if (a[63] == b[63]) 
+      signed_lt = (a < b); // signs match: signed compare same as unsigned
+    else
+      signed_lt = a[63];   // signs differ: a is smaller if neg, larger if pos
+  endfunction
+
+  always @*
+  begin
+    case (func)
+      `ALU_ADDQ:   result = opa + opb;
+      `ALU_SUBQ:   result = opa - opb;
+      `ALU_AND:    result = opa & opb;
+      `ALU_BIC:    result = opa & ~opb;
+      `ALU_BIS:    result = opa | opb;
+      `ALU_ORNOT:  result = opa | ~opb;
+      `ALU_XOR:    result = opa ^ opb;
+      `ALU_EQV:    result = opa ^ ~opb;
+      `ALU_SRL:    result = opa >> opb[5:0];
+      `ALU_SLL:    result = opa << opb[5:0];
+      `ALU_SRA:    result = (opa >> opb[5:0]) | ({64{opa[63]}} << (64 -
+                             opb[5:0])); // arithmetic from logical shift
+      `ALU_CMPULT: result = { 63'd0, (opa < opb) };
+      `ALU_CMPEQ:  result = { 63'd0, (opa == opb) };
+      `ALU_CMPULE: result = { 63'd0, (opa <= opb) };
+      `ALU_CMPLT:  result = { 63'd0, signed_lt(opa, opb) };
+      `ALU_CMPLE:  result = { 63'd0, (signed_lt(opa, opb) || (opa == opb)) };
+      default:     result = 64'hdeadbeefbaadbeef; // here only to force
+                                                  // a combinational solution
+                                                  // a casex would be better
+    endcase
+  end
+endmodule // alu
+
+//
+// BrCond module
+//
+// Given the instruction code, compute the proper condition for the
+// instruction; for branches this condition will indicate whether the
+// target is taken.
+//
+// This module is purely combinational
+//
+module brcond(// Inputs
+              opa,        // Value to check against condition
+              func,       // Specifies which condition to check
+
+              // Output
+              cond        // 0/1 condition result (False/True)
+             );
+
+  input   [2:0] func;
+  input  [63:0] opa;
+  output        cond;
+  
+  reg           cond;
+
+  always @*
+  begin
+    case (func[1:0]) // 'full-case'  All cases covered, no need for a default
+      2'b00: cond = (opa[0] == 0);  // LBC: (lsb(opa) == 0) ?
+      2'b01: cond = (opa == 0);     // EQ: (opa == 0) ?
+      2'b10: cond = (opa[63] == 1); // LT: (signed(opa) < 0) : check sign bit
+      2'b11: cond = (opa[63] == 1) || (opa == 0); // LE: (signed(opa) <= 0)
+    endcase
+  
+     // negate cond if func[2] is set
+    if (func[2])
+      cond = ~cond;
+  end
+endmodule // brcond
+
+
+module ex_alu(// Inputs
+          //inputs
+          clock,
+          reset,
+          // instruction 1 to alu
+          ex_opa1_alu_in,
+          ex_opb1_alu_in,
+          ex_dest_PRN1_alu_in,
+          ex_cond_branch1_alu_in,
+          ex_uncond_branch1_alu_in,
+          ex_NPC1_alu_in, 
+          ex_IR1_alu_in,
+          ex_alu_func1_alu_in,
+          ex_ROB1_alu_in,
+          ex_opa1_select,
+          ex_opb1_select,
+
+          // instruction 2 to alu
+          ex_opa2_alu_in,
+          ex_opb2_alu_in,
+          ex_dest_PRN2_alu_in,
+          ex_cond_branch2_alu_in,
+          ex_uncond_branch2_alu_in,
+          ex_NPC2_alu_in, 
+          ex_IR2_alu_in,
+          ex_alu_func2_alu_in,
+          ex_ROB2_alu_in,
+          ex_opa2_select,
+          ex_opb2_select,
+
+
+          alu0_disable,	
+          alu1_disable,
+          alu0_valid_in,
+          alu1_valid_in,
+
+          //outputs
+          ex_alu1_result_out,
+          ex_alu2_result_out,
+          ex_ROB2_alu_out,
+          ex_ROB1_alu_out,
+          ex_dest_PRN1_alu_out,
+          ex_dest_PRN2_alu_out,
+          ex1_take_branch_out,
+          ex2_take_branch_out,
+          ex_NPC1_alu_out,
+          ex_NPC2_alu_out,
+
+
+          alu0_valid_out,
+          alu1_valid_out);
+
+input         clock, reset;
+
+input  [63:0] ex_opa1_alu_in;            // This ex' opa 
+input  [63:0] ex_opb1_alu_in;            // This ex' opb 
+input   [6:0] ex_dest_PRN1_alu_in;       // This ex' destination tag  
+input         ex_cond_branch1_alu_in;
+input         ex_uncond_branch1_alu_in;
+input  [63:0] ex_NPC1_alu_in;            // PC+4 to EX for target address
+input  [31:0] ex_IR1_alu_in;
+input   [4:0] ex_alu_func1_alu_in;
+input   [5:0] ex_ROB1_alu_in;            // ROB number passed into the FU
+input   [1:0] ex_opa1_select;
+input   [1:0] ex_opb1_select;	
+
+input  [63:0] ex_opa2_alu_in;            // This ex' opa 
+input  [63:0] ex_opb2_alu_in;            // This ex' opb 
+input   [6:0] ex_dest_PRN2_alu_in;       // This ex' destination tag  
+input         ex_cond_branch2_alu_in;
+input         ex_uncond_branch2_alu_in;
+input  [63:0] ex_NPC2_alu_in;            // PC+4 to EX for target address
+input  [31:0] ex_IR2_alu_in;
+input   [4:0] ex_alu_func2_alu_in;
+input   [5:0] ex_ROB2_alu_in;            // ROB number passed into the FU
+input   [1:0] ex_opa2_select;
+input   [1:0] ex_opb2_select;
+
+input  	      alu0_disable;
+input         alu1_disable;
+input	      alu0_valid_in;
+input	      alu1_valid_in;	
+
+output [63:0] ex_alu1_result_out;
+output  [5:0] ex_ROB1_alu_out;
+output  [6:0] ex_dest_PRN1_alu_out;
+output [63:0] ex_alu2_result_out;
+output  [5:0] ex_ROB2_alu_out;
+output  [6:0] ex_dest_PRN2_alu_out;
+output        ex1_take_branch_out;  // is this a taken branch?
+output        ex2_take_branch_out;
+output        alu0_valid_out;
+output        alu1_valid_out;
+output  [63:0] ex_NPC1_alu_out;
+output  [63:0] ex_NPC2_alu_out;
+
+reg    [63:0] opa_mux_out1, opb_mux_out1;
+reg    [63:0] opa_mux_out2, opb_mux_out2;
+wire          brcond_result1;
+wire          brcond_result2;
+
+reg	      alu0_valid_in1;
+reg	      alu1_valid_in1;
+reg    [63:0] ex_opa1_alu_in1;            // This ex' opa 
+reg    [63:0] ex_opb1_alu_in1;            // This ex' opb 
+reg     [6:0] ex_dest_PRN1_alu_in1;       // This ex' destination tag  
+reg           ex_cond_branch1_alu_in1;
+reg           ex_uncond_branch1_alu_in1;
+reg    [63:0] ex_NPC1_alu_in1;            // PC+4 to EX for target address
+reg    [31:0] ex_IR1_alu_in1;
+reg     [4:0] ex_alu_func1_alu_in1;
+reg     [5:0] ex_ROB1_alu_in1;            // ROB number passed into the FU
+reg     [1:0] ex_opa1_select1;
+reg     [1:0] ex_opb1_select1;
+
+reg    [63:0] ex_opa2_alu_in1;            // This ex' opa 
+reg    [63:0] ex_opb2_alu_in1;            // This ex' opb 
+reg     [6:0] ex_dest_PRN2_alu_in1;       // This ex' destination tag  
+reg           ex_cond_branch2_alu_in1;
+reg           ex_uncond_branch2_alu_in1;
+reg    [63:0] ex_NPC2_alu_in1;            // PC+4 to EX for target address
+reg    [31:0] ex_IR2_alu_in1;
+reg     [4:0] ex_alu_func2_alu_in1;
+reg     [5:0] ex_ROB2_alu_in1;            // ROB number passed into the FU
+reg     [1:0] ex_opa2_select1;
+reg     [1:0] ex_opb2_select1;
+
+
+// set up possible immediates:
+//   br_disp: sign-extended 21-bit immediate * 4 for branch displacement
+//   alu_imm: zero-extended 8-bit immediate for ALU ops
+
+wire [63:0] br_disp2 = { {41{ex_IR2_alu_in1[20]}}, ex_IR2_alu_in1[20:0], 2'b00 };
+wire [63:0] br_disp1 = { {41{ex_IR1_alu_in1[20]}}, ex_IR1_alu_in1[20:0], 2'b00 };
+wire [63:0] alu_imm2 = { 56'b0, ex_IR2_alu_in1[20:13] };
+wire [63:0] alu_imm1 = { 56'b0, ex_IR1_alu_in1[20:13] };
+wire [63:0] mem_disp2 = { {48{ex_IR2_alu_in1[15]}}, ex_IR2_alu_in1[15:0] };
+wire [63:0] mem_disp1 = { {48{ex_IR1_alu_in1[15]}}, ex_IR1_alu_in1[15:0] };
+
+   
+always @(posedge clock)
+begin
+   if(reset)
+   begin
+      ex_opa1_alu_in1 <= `SD 64'b0;          
+      ex_opb1_alu_in1 <= `SD 64'b0;            
+      ex_dest_PRN1_alu_in1 <= `SD {2'b0,`ZERO_REG};       
+      ex_cond_branch1_alu_in1 <= `SD 1'b0;
+      ex_uncond_branch1_alu_in1 <= `SD 1'b0;
+      ex_NPC1_alu_in1 <= `SD 64'b0;            
+      ex_IR1_alu_in1 <= `SD `NOOP_INST;
+      ex_alu_func1_alu_in1 <= `SD 5'b0;
+      ex_ROB1_alu_in1 <= `SD 6'b0;
+      ex_opa1_select1 <= `SD 2'b0;
+      ex_opb1_select1 <= `SD 2'b0;
+      alu0_valid_in1 <= `SD 1'b0;
+
+      ex_opa2_alu_in1 <= `SD 64'b0;
+      ex_opb2_alu_in1 <= `SD 64'b0;
+      ex_dest_PRN2_alu_in1 <= `SD {2'b0,`ZERO_REG};       
+      ex_cond_branch2_alu_in1 <= `SD 1'b0;
+      ex_uncond_branch2_alu_in1 <= `SD 1'b0;
+      ex_NPC2_alu_in1 <= `SD 64'b0;            
+      ex_IR2_alu_in1 <= `SD `NOOP_INST;
+      ex_alu_func2_alu_in1 <= `SD 5'b0;
+      ex_ROB2_alu_in1 <= `SD 6'b0;
+      ex_opa2_select1 <= `SD 2'b0;
+      ex_opb2_select1 <= `SD 2'b0;
+      alu1_valid_in1 <= `SD 1'b0;
+   end
+   else
+   begin
+      if(!alu0_disable)
+      begin
+         ex_opa1_alu_in1 <= `SD ex_opa1_alu_in;
+         ex_opb1_alu_in1 <= `SD ex_opb1_alu_in;
+         ex_dest_PRN1_alu_in1 <= `SD ex_dest_PRN1_alu_in;
+         ex_cond_branch1_alu_in1 <= `SD ex_cond_branch1_alu_in;
+         ex_uncond_branch1_alu_in1 <= `SD ex_uncond_branch1_alu_in;
+         ex_NPC1_alu_in1 <= `SD ex_NPC1_alu_in - 4;
+         ex_IR1_alu_in1 <= `SD ex_IR1_alu_in;
+         ex_alu_func1_alu_in1 <= `SD ex_alu_func1_alu_in;
+         ex_ROB1_alu_in1 <= `SD ex_ROB1_alu_in;
+         ex_opa1_select1 <= `SD ex_opa1_select;
+         ex_opb1_select1 <= `SD ex_opb1_select;
+         alu0_valid_in1  <= `SD alu0_valid_in;
+      end
+
+      if(!alu1_disable)
+      begin
+         ex_opa2_alu_in1 <= `SD ex_opa2_alu_in;          
+         ex_opb2_alu_in1 <= `SD ex_opb2_alu_in;            
+         ex_dest_PRN2_alu_in1 <= `SD ex_dest_PRN2_alu_in;       
+         ex_cond_branch2_alu_in1 <= `SD ex_cond_branch2_alu_in;
+         ex_uncond_branch2_alu_in1 <= `SD ex_uncond_branch2_alu_in;
+         ex_NPC2_alu_in1 <= `SD ex_NPC2_alu_in - 4;            
+         ex_IR2_alu_in1 <= `SD ex_IR2_alu_in;
+         ex_alu_func2_alu_in1 <= `SD ex_alu_func2_alu_in;
+         ex_ROB2_alu_in1 <= `SD ex_ROB2_alu_in;
+         ex_opa2_select1 <= `SD ex_opa2_select;
+         ex_opb2_select1 <= `SD ex_opb2_select;
+         alu1_valid_in1  <= `SD alu1_valid_in;
+      end
+   end
+end
+
+   //
+   // ALU opA mux
+   //
+
+   always @*
+   begin
+      case (ex_opa1_select1)
+        `ALU_OPA_IS_REGA:     opa_mux_out1 = ex_opa1_alu_in1;
+        `ALU_OPA_IS_MEM_DISP: opa_mux_out1 = mem_disp1;
+        `ALU_OPA_IS_NPC:      opa_mux_out1 = ex_NPC1_alu_in1;
+        `ALU_OPA_IS_NOT3:     opa_mux_out1 = ~64'h3;
+      endcase
+   end
+
+   //
+   // ALU opB mux
+   //
+   always @*
+   begin
+      // Default value, Set only because the case isnt full.  If you see this
+      // value on the output of the mux you have an invalid opb_select
+      opb_mux_out1 = 64'hbaadbeefdeadbeef;
+      case (ex_opb1_select1)
+        `ALU_OPB_IS_REGB:     opb_mux_out1 = ex_opb1_alu_in1;
+        `ALU_OPB_IS_ALU_IMM:  opb_mux_out1 = alu_imm1;
+        `ALU_OPB_IS_BR_DISP:  opb_mux_out1 = br_disp1;
+      endcase 
+   end
+
+
+   //
+   // ALU opA mux
+   //
+   always @*
+   begin
+      case (ex_opa2_select1)
+        `ALU_OPA_IS_REGA:     opa_mux_out2 = ex_opa2_alu_in1;
+        `ALU_OPA_IS_MEM_DISP: opa_mux_out2 = mem_disp2;
+        `ALU_OPA_IS_NPC:      opa_mux_out2 = ex_NPC2_alu_in1;
+        `ALU_OPA_IS_NOT3:     opa_mux_out2 = ~64'h3;
+      endcase
+   end
+
+   //
+   // ALU opB mux
+   //
+   always @*
+   begin
+     // Default value, Set only because the case isnt full.  If you see this
+     // value on the output of the mux you have an invalid opb_select
+      opb_mux_out2 = 64'hbaadbeefdeadbeef;
+      case (ex_opb2_select1)
+        `ALU_OPB_IS_REGB:     opb_mux_out2 = ex_opb2_alu_in1;
+        `ALU_OPB_IS_ALU_IMM:  opb_mux_out2 = alu_imm2;
+        `ALU_OPB_IS_BR_DISP:  opb_mux_out2 = br_disp2;
+      endcase 
+   end
+
+
+   //
+   // instantiate the ALU
+   //
+   alu alu_0 (// Inputs
+              .opa(opa_mux_out1),
+              .opb(opb_mux_out1),
+              .func(ex_alu_func1_alu_in1),
+
+              // Output
+              .result(ex_alu1_result_out));
+
+   alu alu_1 (// Inputs
+              .opa(opa_mux_out2),
+              .opb(opb_mux_out2),
+              .func(ex_alu_func2_alu_in1),
+
+              // Output
+              .result(ex_alu2_result_out));
+
+   //
+   // instantiate the branch condition tester
+   //
+   brcond brcond0(// Inputs
+                  .opa(ex_opa1_alu_in1),       // always check regA value
+                  .func(ex_IR1_alu_in1[28:26]), // inst bits to determine check
+
+                  // Output
+                  .cond(brcond_result1));
+
+   brcond brcond1(// Inputs
+                  .opa(ex_opa2_alu_in1),       // always check regA value
+                  .func(ex_IR2_alu_in1[28:26]), // inst bits to determine check
+
+                  // Output
+                  .cond(brcond_result2));
+
+   // ultimate "take branch" signal:
+   //    unconditional, or conditional and the condition is true
+   assign ex1_take_branch_out = ex_uncond_branch1_alu_in1
+                          | (ex_cond_branch1_alu_in1 & brcond_result1);
+
+   // ultimate "take branch" signal:
+   //    unconditional, or conditional and the condition is true
+   assign ex2_take_branch_out = ex_uncond_branch2_alu_in1
+                          | (ex_cond_branch2_alu_in1 & brcond_result2);
+
+   assign ex_ROB1_alu_out = ex_ROB1_alu_in1;
+   assign ex_dest_PRN1_alu_out = ex_dest_PRN1_alu_in1;
+   assign alu0_valid_out = alu0_valid_in1;
+   assign ex_ROB2_alu_out = ex_ROB2_alu_in1;
+   assign ex_dest_PRN2_alu_out = ex_dest_PRN2_alu_in1;
+   assign alu1_valid_out = alu1_valid_in1;
+   assign ex_NPC1_alu_out = ex_NPC1_alu_in1;
+   assign ex_NPC2_alu_out = ex_NPC2_alu_in1;
+
+
+endmodule // module ex_alu
+

@@ -1,0 +1,379 @@
+// RS entry
+// vikask sucks
+// Sunwoo genius
+
+module rs_entry_mult(// input
+           reset,
+           clock,
+
+           rs_entry_use_enable1,
+           rs_entry_use_enable2,
+           rs_entry_free_in,
+
+           rs_entry_cdb1_in,
+           rs_entry_cdb1_tag,
+           rs_entry_cdb1_valid,
+
+           rs_entry_cdb2_in,
+           rs_entry_cdb2_tag,
+           rs_entry_cdb2_valid,
+
+           rs_entry_dest1_in,
+           rs_entry_opa1_in,
+           rs_entry_opa1_tag_in,
+           rs_entry_opa1_valid,
+           rs_entry_opb1_in,
+           rs_entry_opb1_tag_in,
+           rs_entry_opb1_valid, 
+           rs_entry_load1_in,
+           rs_entry_cond_branch1_in,
+           rs_entry_uncond_branch1_in,
+           rs_entry_NPC1_in,
+           rs_entry_IR1_in,
+           rs_entry_alu_func1_in,
+           rs_entry_ROB1_in,
+           rs_entry_rd_mem1_in,
+           rs_entry_wr_mem1_in,
+           rs_entry_opa_select1_in,
+           rs_entry_opb_select1_in,
+           rs_entry_instr_valid1_in,
+
+           rs_entry_dest2_in,
+           rs_entry_opa2_in,
+           rs_entry_opa2_tag_in,
+           rs_entry_opa2_valid,
+           rs_entry_opb2_in,
+           rs_entry_opb2_tag_in,
+           rs_entry_opb2_valid, 
+           rs_entry_load2_in,
+           rs_entry_cond_branch2_in,
+           rs_entry_uncond_branch2_in,
+           rs_entry_NPC2_in,
+           rs_entry_IR2_in,
+           rs_entry_alu_func2_in,
+           rs_entry_ROB2_in,
+           rs_entry_rd_mem2_in,
+           rs_entry_wr_mem2_in,
+           rs_entry_opa_select2_in,
+           rs_entry_opb_select2_in,
+           rs_entry_instr_valid2_in,
+
+           // output
+           rs_entry_avail_out, 
+           rs_entry_ready_out,
+
+           rs_entry_opa1_out,
+           rs_entry_opb1_out,
+           rs_entry_dest_tag1_out,
+           rs_entry_cond_branch1_out,
+           rs_entry_uncond_branch1_out,
+           rs_entry_NPC1_out,
+           rs_entry_IR1_out,
+           rs_entry_alu_func1_out,
+           rs_entry_ROB1_out,
+           rs_entry_opa_select1_out,
+           rs_entry_opb_select1_out,
+           rs_entry_instr_valid1_out,
+
+           rs_entry_opa2_out,
+           rs_entry_opb2_out,
+           rs_entry_dest_tag2_out,
+           rs_entry_cond_branch2_out,
+           rs_entry_uncond_branch2_out,
+           rs_entry_NPC2_out,
+           rs_entry_IR2_out,
+           rs_entry_alu_func2_out,
+           rs_entry_ROB2_out,
+           rs_entry_opa_select2_out,
+           rs_entry_opb_select2_out,
+           rs_entry_instr_valid2_out); 
+
+input          reset;               // reset signal 
+input          clock;               // the clock 
+
+input          rs_entry_use_enable1; // Signal to send data to FU AND to free this RS
+input          rs_entry_use_enable2; // Signal to send data to FU AND to free this RS
+input          rs_entry_free_in;       // equal to 1 when FU has data
+
+input  [63:0]  rs_entry_cdb1_in;     // CDB bus from functional units 
+input   [6:0]  rs_entry_cdb1_tag;    // CDB tag bus from functional units 
+input          rs_entry_cdb1_valid;  // The data on the CDB is valid 
+
+input  [63:0]  rs_entry_cdb2_in;     // CDB bus from functional units 
+input   [6:0]  rs_entry_cdb2_tag;    // CDB tag bus from functional units 
+input          rs_entry_cdb2_valid;  // The data on the CDB is valid 
+
+input   [6:0]  rs_entry_dest1_in;    // The destination of this instruction 
+input  [63:0]  rs_entry_opa1_in;     // Operand a from Rename 
+input   [6:0]  rs_entry_opa1_tag_in; // Operand a index from  rename
+input  [63:0]  rs_entry_opb1_in;     // Operand b from Rename 
+input   [6:0]  rs_entry_opb1_tag_in; // Operand b index from  rename
+input          rs_entry_opa1_valid;  // Is Opa a Tag or immediate data
+input          rs_entry_opb1_valid;  // Is Opb a tag or immediate data
+input          rs_entry_load1_in;    // Signal from rename to flop opa/b 
+input   [63:0] rs_entry_NPC1_in;  // incoming instruction PC+4
+input   [31:0] rs_entry_IR1_in;         // incoming instruction 
+input    [4:0] rs_entry_alu_func1_in;
+input    [5:0] rs_entry_ROB1_in;
+input          rs_entry_cond_branch1_in;
+input          rs_entry_uncond_branch1_in;
+input    [1:0] rs_entry_opa_select1_in;
+input    [1:0] rs_entry_opb_select1_in;
+input          rs_entry_rd_mem1_in;
+input          rs_entry_wr_mem1_in;
+input          rs_entry_instr_valid1_in;
+
+input   [6:0]  rs_entry_dest2_in;    // The destination of this instruction 
+input  [63:0]  rs_entry_opa2_in;     // Operand a from Rename  
+input   [6:0]  rs_entry_opa2_tag_in; // Operand b index from  rename
+input  [63:0]  rs_entry_opb2_in;     // Operand a from Rename 
+input   [6:0]  rs_entry_opb2_tag_in; // Operand b index from  rename
+input          rs_entry_opa2_valid;  // Is Opa a Tag or immediate data
+input          rs_entry_opb2_valid;  // Is Opb a tag or immediate data
+input          rs_entry_load2_in;    // Signal from rename to flop opa/b 
+input   [63:0] rs_entry_NPC2_in;  // incoming instruction PC+4
+input   [31:0] rs_entry_IR2_in;         // incoming instruction 
+input    [4:0] rs_entry_alu_func2_in;
+input    [5:0] rs_entry_ROB2_in;
+input          rs_entry_cond_branch2_in;
+input          rs_entry_uncond_branch2_in;
+input    [1:0] rs_entry_opa_select2_in;
+input    [1:0] rs_entry_opb_select2_in;
+input          rs_entry_rd_mem2_in;
+input          rs_entry_wr_mem2_in;
+input          rs_entry_instr_valid2_in;
+
+output         rs_entry_ready_out;     // This RS is in use and ready to go to EX 
+output         rs_entry_avail_out;
+
+output         rs_entry_cond_branch1_out;
+output         rs_entry_uncond_branch1_out;
+output  [63:0] rs_entry_NPC1_out;     // outgoing PC+4
+output  [31:0] rs_entry_IR1_out;            // outgoing instruction 
+output   [4:0] rs_entry_alu_func1_out;
+output   [5:0] rs_entry_ROB1_out;
+output  [63:0] rs_entry_opa1_out;       // This RS' opa 
+output  [63:0] rs_entry_opb1_out;       // This RS' opb 
+output   [6:0] rs_entry_dest_tag1_out;  // This RS' destination tag
+output   [1:0] rs_entry_opa_select1_out;
+output   [1:0] rs_entry_opb_select1_out;
+output         rs_entry_instr_valid1_out;
+
+output         rs_entry_cond_branch2_out;
+output         rs_entry_uncond_branch2_out;
+output  [63:0] rs_entry_NPC2_out;     // outgoing PC+4
+output  [31:0] rs_entry_IR2_out;            // outgoing instruction 
+output   [4:0] rs_entry_alu_func2_out;
+output   [5:0] rs_entry_ROB2_out;
+output  [63:0] rs_entry_opa2_out;       // This RS' opa 
+output  [63:0] rs_entry_opb2_out;       // This RS' opb 
+output   [6:0] rs_entry_dest_tag2_out;  // This RS' destination tag
+output   [1:0] rs_entry_opa_select2_out;
+output   [1:0] rs_entry_opb_select2_out;
+output         rs_entry_instr_valid2_out; 
+
+reg     [63:0] OPa;              // Operand A 
+reg      [6:0] OPa_tag;          // Operand A tag
+reg     [63:0] OPb;              // Operand B 
+reg      [6:0] OPb_tag;          // Operand B tag
+reg            OPaValid;         // Operand a Tag/Value 
+reg            OPbValid;         // Operand B Tag/Value 
+reg            InUse;            // InUse bit 
+reg      [6:0] DestTag;          // Destination Tag bit 
+reg      [5:0] ROB_num;
+reg            cond_br;
+reg            uncond_br;
+reg     [63:0] issue_PC;
+reg     [31:0] issue_IR;
+reg      [5:0] alu_func;
+reg      [1:0] opa_select;
+reg      [1:0] opb_select;
+reg            valid_inst;
+
+wire           LoadAFromCDB1;  // signal to load from the CDB 
+wire           LoadBFromCDB1;  // signal to load from the CDB 
+wire           LoadAFromCDB2;  // signal to load from the CDB 
+wire           LoadBFromCDB2;  // signal to load from the CDB 
+
+ 
+assign rs_entry_avail_out = ~InUse;
+assign rs_entry_ready_out = InUse & OPaValid & OPbValid;
+
+assign rs_entry_opa1_out = rs_entry_use_enable1 ? OPa : 64'b0; 
+assign rs_entry_opb1_out = rs_entry_use_enable1 ? OPb : 64'b0; 
+assign rs_entry_dest_tag1_out = rs_entry_use_enable1 ? DestTag : 64'b0;
+assign rs_entry_ROB1_out = rs_entry_use_enable1 ? ROB_num : 0;
+assign rs_entry_cond_branch1_out = rs_entry_use_enable1 ? cond_br : 0;
+assign rs_entry_uncond_branch1_out = rs_entry_use_enable1 ? uncond_br : 0;
+assign rs_entry_NPC1_out = rs_entry_use_enable1 ? issue_PC : 64'b0;
+assign rs_entry_IR1_out = rs_entry_use_enable1 ? issue_IR : 32'b0;
+assign rs_entry_alu_func1_out = rs_entry_use_enable1 ? alu_func : 5'b0;
+assign rs_entry_opa_select1_out = rs_entry_use_enable1 ? opa_select : 2'b0;
+assign rs_entry_opb_select1_out = rs_entry_use_enable1 ? opb_select : 2'b0;
+assign rs_entry_instr_valid1_out = rs_entry_use_enable1 ? valid_inst : 1'b0;
+
+assign rs_entry_opa2_out = rs_entry_use_enable2 && (rs_entry_use_enable1!=rs_entry_use_enable2) ? OPa : 64'b0; 
+assign rs_entry_opb2_out = rs_entry_use_enable2 && (rs_entry_use_enable1!=rs_entry_use_enable2) ? OPb : 64'b0; 
+assign rs_entry_dest_tag2_out = rs_entry_use_enable2 && (rs_entry_use_enable1!=rs_entry_use_enable2) ? DestTag : 64'b0;
+assign rs_entry_ROB2_out = rs_entry_use_enable2 && (rs_entry_use_enable1!=rs_entry_use_enable2) ? ROB_num : 0;
+assign rs_entry_cond_branch2_out = rs_entry_use_enable2 && (rs_entry_use_enable1!=rs_entry_use_enable2) ? cond_br : 0;
+assign rs_entry_uncond_branch2_out = rs_entry_use_enable2 && (rs_entry_use_enable1!=rs_entry_use_enable2) ? uncond_br : 0;
+assign rs_entry_NPC2_out = rs_entry_use_enable2 && (rs_entry_use_enable1!=rs_entry_use_enable2) ? issue_PC : 64'b0;
+assign rs_entry_IR2_out = rs_entry_use_enable2 && (rs_entry_use_enable1!=rs_entry_use_enable2) ? issue_IR : 32'b0;
+assign rs_entry_alu_func2_out = rs_entry_use_enable2 && (rs_entry_use_enable1!=rs_entry_use_enable2) ? alu_func : 5'b0;
+assign rs_entry_opa_select2_out = rs_entry_use_enable2 && (rs_entry_use_enable1!=rs_entry_use_enable2) ? opa_select : 2'b0;
+assign rs_entry_opb_select2_out = rs_entry_use_enable2 && (rs_entry_use_enable1!=rs_entry_use_enable2) ? opb_select : 2'b0;
+assign rs_entry_instr_valid2_out = rs_entry_use_enable2 && (rs_entry_use_enable1!=rs_entry_use_enable2) ? valid_inst : 1'b0;
+
+// Has the tag we are waiting for shown up on the CDB 
+assign LoadAFromCDB1 = (rs_entry_cdb1_tag == OPa_tag) && (rs_entry_cdb1_tag != 7'd31) && !OPaValid &&
+                      InUse && rs_entry_cdb1_valid; 
+assign LoadBFromCDB1 = (rs_entry_cdb1_tag == OPb_tag) && (rs_entry_cdb1_tag != 7'd31) && !OPbValid &&
+                      InUse && rs_entry_cdb1_valid; 
+
+assign LoadAFromCDB2 = (rs_entry_cdb2_tag == OPa_tag) && (rs_entry_cdb2_tag != 7'd31) && !OPaValid &&
+                      InUse && rs_entry_cdb2_valid; 
+assign LoadBFromCDB2 = (rs_entry_cdb2_tag == OPb_tag) && (rs_entry_cdb2_tag != 7'd31) && !OPbValid &&
+                      InUse && rs_entry_cdb2_valid; 
+
+always @(posedge clock) 
+begin 
+   if (reset) 
+   begin 
+      OPa <= `SD 0; 
+      OPa_tag <= `SD 0;
+      OPb <= `SD 0; 
+      OPb_tag <= `SD 0;
+      OPaValid <= `SD 0; 
+      OPbValid <= `SD 0; 
+      InUse <= `SD 1'b0; 
+      DestTag <= `SD 0;
+      ROB_num <= `SD 0;
+      cond_br <= `SD 0;
+      uncond_br <= `SD 0;
+      issue_PC <= `SD 0;
+      issue_IR <= `SD 0;
+      alu_func <= `SD 0;
+      opa_select <= `SD 0;
+      opb_select <= `SD 0;
+      valid_inst <= `SD 0;
+   end 
+   else 
+   begin 
+      if (rs_entry_load1_in && (rs_entry_alu_func1_in == `ALU_MULQ) &&
+          rs_entry_instr_valid1_in && ~rs_entry_rd_mem1_in && ~rs_entry_wr_mem1_in)
+      begin 
+         OPa <= `SD rs_entry_opa1_in; 
+         OPa_tag <= `SD rs_entry_opa1_tag_in;
+         OPb <= `SD rs_entry_opb1_in; 
+         OPb_tag <= `SD rs_entry_opb1_tag_in;
+         OPaValid <= `SD rs_entry_opa1_valid; 
+         OPbValid <= `SD rs_entry_opb1_valid; 
+         InUse <= `SD 1'b1; 
+         DestTag <= `SD rs_entry_dest1_in;
+         ROB_num <= `SD rs_entry_ROB1_in;
+         cond_br <= `SD rs_entry_cond_branch1_in;
+         uncond_br <= `SD rs_entry_uncond_branch1_in;
+         issue_PC <= `SD rs_entry_NPC1_in;
+         issue_IR <= `SD rs_entry_IR1_in;
+         alu_func <= `SD rs_entry_alu_func1_in;
+         opa_select <= `SD rs_entry_opa_select1_in;
+         opb_select <= `SD rs_entry_opb_select1_in;
+         valid_inst <= `SD rs_entry_instr_valid1_in;
+
+         if(rs_entry_cdb1_tag == rs_entry_opa1_tag_in && (rs_entry_cdb1_tag != 7'd31))
+         begin
+            OPa <= `SD rs_entry_cdb1_in;
+            OPaValid <= `SD 1'b1;
+         end
+         if(rs_entry_cdb1_tag == rs_entry_opb1_tag_in && (rs_entry_cdb1_tag != 7'd31))
+         begin
+            OPb <= `SD rs_entry_cdb1_in;
+            OPbValid <= `SD 1'b1;
+         end
+         if(rs_entry_cdb2_tag == rs_entry_opa1_tag_in && (rs_entry_cdb2_tag != 7'd31))
+         begin
+            OPa <= `SD rs_entry_cdb2_in;
+            OPaValid <= `SD 1'b1;
+         end
+         if(rs_entry_cdb2_tag == rs_entry_opb1_tag_in && (rs_entry_cdb2_tag != 7'd31))
+         begin
+            OPb <= `SD rs_entry_cdb2_in;
+            OPbValid <= `SD 1'b1;
+         end
+      end 
+      else if (rs_entry_load2_in && (rs_entry_alu_func2_in == `ALU_MULQ) &&
+          rs_entry_instr_valid2_in && ~rs_entry_rd_mem2_in && ~rs_entry_wr_mem2_in)
+      begin 
+         OPa <= `SD rs_entry_opa2_in; 
+         OPa_tag <= `SD rs_entry_opa2_tag_in;
+         OPb <= `SD rs_entry_opb2_in; 
+         OPb_tag <= `SD rs_entry_opb2_tag_in;
+         OPaValid <= `SD rs_entry_opa2_valid; 
+         OPbValid <= `SD rs_entry_opb2_valid; 
+         InUse <= `SD 1'b1; 
+         DestTag <= `SD rs_entry_dest2_in;
+         ROB_num <= `SD rs_entry_ROB2_in;
+         cond_br <= `SD rs_entry_cond_branch2_in;
+         uncond_br <= `SD rs_entry_uncond_branch2_in;
+         issue_PC <= `SD rs_entry_NPC2_in;
+         issue_IR <= `SD rs_entry_IR2_in;
+         alu_func <= `SD rs_entry_alu_func2_in;
+         opa_select <= `SD rs_entry_opa_select2_in;
+         opb_select <= `SD rs_entry_opb_select2_in;
+         valid_inst <= `SD rs_entry_instr_valid2_in;
+
+         if(rs_entry_cdb1_tag == rs_entry_opa2_tag_in && (rs_entry_cdb1_tag != 7'd31))
+         begin
+            OPa <= `SD rs_entry_cdb1_in;
+            OPaValid <= `SD 1'b1;
+         end
+         if(rs_entry_cdb1_tag == rs_entry_opb2_tag_in && (rs_entry_cdb1_tag != 7'd31))
+         begin
+            OPb <= `SD rs_entry_cdb1_in;
+            OPbValid <= `SD 1'b1;
+         end
+         if(rs_entry_cdb2_tag == rs_entry_opa2_tag_in && (rs_entry_cdb2_tag != 7'd31))
+         begin
+            OPa <= `SD rs_entry_cdb2_in;
+            OPaValid <= `SD 1'b1;
+         end
+         if(rs_entry_cdb2_tag == rs_entry_opb2_tag_in && (rs_entry_cdb2_tag != 7'd31))
+         begin
+            OPb <= `SD rs_entry_cdb2_in;
+            OPbValid <= `SD 1'b1;
+         end
+      end 
+      else 
+      begin
+         if (LoadAFromCDB1)
+         begin
+            OPa <= `SD rs_entry_cdb1_in;
+            OPaValid <= `SD 1'b1;
+         end
+         if (LoadBFromCDB1)
+         begin
+            OPb <= `SD rs_entry_cdb1_in;
+            OPbValid <= `SD 1'b1;
+         end
+         if (LoadAFromCDB2)
+         begin
+            OPa <= `SD rs_entry_cdb2_in;
+            OPaValid <= `SD 1'b1;
+         end
+         if (LoadBFromCDB2)
+         begin
+            OPb <= `SD rs_entry_cdb2_in;
+            OPbValid <= `SD 1'b1;
+         end
+
+         // Clear InUse bit once the FU has data
+         if (rs_entry_free_in)
+         begin
+            InUse <= `SD 0;
+         end
+      end // else rs_entry_load_in 
+   end // else !reset 
+end // always @ 
+endmodule  
+

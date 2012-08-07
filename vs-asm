@@ -1,0 +1,60 @@
+#! /usr/um/bin/perl
+
+use POSIX qw(uname);
+@uname = POSIX::uname();
+
+# set path to cross-platform utilities
+$sunpath = "/afs/engin.umich.edu/class/perm/eecs470/w02/bin";
+$linuxpath = "/usr/caen/generic/mentor_lib-D.1/public/eecs470/bin";
+
+if (@uname[0] eq "SunOS") {
+    $path = $sunpath;
+} else {
+    $path = $linuxpath;
+}
+
+$file = shift;
+
+$tmpfile = "a.out.$$";
+
+system("$path/gas-alpha -o $tmpfile $file");
+
+open ASMOUT, "$path/objdump-alpha -s $tmpfile -j .text |";
+
+$hdigit = '[\da-fA-F]';
+
+# skip up to actual text segment output
+while (<ASMOUT>)
+{
+    chop;
+    last if ($_ eq 'Contents of section .text:');
+}
+
+
+while (<ASMOUT>)
+{
+    ($data) = /^ $hdigit{4} (($hdigit{8} ){1,4})/;
+    
+    @words = split(' ', $data);
+
+    while ($#words < 3)
+    {
+	push @words, '00000000';
+    }
+
+    print byterev($words[1]), byterev($words[0]), "\n";
+    print byterev($words[3]), byterev($words[2]), "\n";
+}
+
+
+sub byterev
+{
+    my $w = shift;
+
+    my @chars = split(//, $w);
+    return join('', @chars[6..7], @chars[4..5], @chars[2..3], @chars[0..1]);
+}
+
+close ASMOUT;
+
+unlink $tmpfile;

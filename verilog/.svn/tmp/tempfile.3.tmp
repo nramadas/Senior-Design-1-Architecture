@@ -1,0 +1,323 @@
+// ROB: The Whole Thing
+// Niranjan is awesome
+// Everyone else is just okay
+
+module ROB(
+           // inputs:
+           reset,
+           clock,
+
+           ROB_load1_in,
+           ROB_load2_in,
+
+           ROB_NPC1_in,
+           ROB_PC1_in,
+           ROB_dest_PRN1_in,
+           ROB_dest_PRN_old1_in,
+           ROB_dest_ARN1_in,
+           ROB_br_pred1_in,
+           ROB_br_actual1_in,
+           ROB_target_addr1_in,
+           ROB_cdb_dest_PRN1_in,
+           ROB_num1_in,
+           ROB_wr_mem1_in,
+           ROB_instr_valid1_in,
+
+           ROB_NPC2_in,
+           ROB_PC2_in,
+           ROB_dest_PRN2_in,
+           ROB_dest_PRN_old2_in,
+           ROB_dest_ARN2_in,
+           ROB_br_pred2_in,
+           ROB_br_actual2_in,
+           ROB_target_addr2_in,
+           ROB_cdb_dest_PRN2_in,
+           ROB_num2_in,
+           ROB_wr_mem2_in,
+           ROB_instr_valid2_in,
+
+           // outputs:
+           ROB_flush1,
+           ROB_flush2,
+
+           ROB_to_RRAT_PRN1_out,
+           ROB_to_RRAT_ARN1_out,
+           ROB_to_PRF_PRN_old1_out,
+           ROB_to_fetch_target_addr1_out,
+           ROB_mis_predict1_out,
+
+           ROB_to_RRAT_PRN2_out,
+           ROB_to_RRAT_ARN2_out,
+           ROB_to_PRF_PRN_old2_out,
+           ROB_to_fetch_target_addr2_out,
+           ROB_mis_predict2_out
+          );
+
+input         reset;
+input         clock;
+
+input  [63:0] ROB_NPC1_in;
+input  [63:0] ROB_PC1_in;
+input   [6:0] ROB_dest_PRN1_in;
+input   [6:0] ROB_dest_PRN_old1_in;
+input   [4:0] ROB_dest_ARN1_in;
+input         ROB_br_pred1_in;
+input         ROB_br_actual1_in;
+input  [63:0] ROB_target_addr1_in;
+input         ROB_load1_in;
+input   [6:0] ROB_cdb_dest_PRN1_in;
+input   [6:0] ROB_num1_in;
+input         ROB_wr_mem1_in;
+input         ROB_instr_valid1_in;
+
+input  [63:0] ROB_NPC2_in;
+input  [63:0] ROB_PC2_in;
+input   [6:0] ROB_dest_PRN2_in;
+input   [6:0] ROB_dest_PRN_old2_in;
+input   [4:0] ROB_dest_ARN2_in;
+input         ROB_br_pred2_in;
+input         ROB_br_actual2_in;
+input  [63:0] ROB_target_addr2_in;
+input         ROB_load2_in;
+input   [6:0] ROB_cdb_dest_PRN2_in;
+input   [6:0] ROB_num2_in;
+input         ROB_wr_mem2_in;
+input         ROB_instr_valid2_in;
+
+output        ROB_flush1;
+output        ROB_flush2;
+
+output  [6:0] ROB_to_RRAT_PRN1_out;
+output  [5:0] ROB_to_RRAT_ARN1_out;
+output  [6:0] ROB_to_PRF_PRN_old1_out;
+output [63:0] ROB_to_fetch_target_addr1_out;
+output        ROB_mis_predict1_out;
+
+output  [6:0] ROB_to_RRAT_PRN2_out;
+output  [5:0] ROB_to_RRAT_ARN2_out;
+output  [6:0] ROB_to_PRF_PRN_old2_out;
+output [63:0] ROB_to_fetch_target_addr2_out;
+output        ROB_mis_predict2_out;
+
+wire          ROB_load_allowed1_in;
+wire          ROB_load_allowed2_in;
+
+reg           ROB_flush1;
+reg           ROB_flush2;
+
+reg     [6:0] i;
+
+reg     [6:0] ROB_to_RRAT_PRN1_out;
+reg     [5:0] ROB_to_RRAT_ARN1_out;
+reg     [6:0] ROB_to_PRF_PRN_old1_out;
+reg    [63:0] ROB_to_fetch_target_addr1_out;
+reg           ROB_mis_predict1_out;
+
+reg     [6:0] ROB_to_RRAT_PRN2_out;
+reg     [5:0] ROB_to_RRAT_ARN2_out;
+reg     [6:0] ROB_to_PRF_PRN_old2_out;
+reg    [63:0] ROB_to_fetch_target_addr2_out;
+reg           ROB_mis_predict2_out;
+
+reg    [63:0] NPC[63:0];
+reg    [63:0] PC[63:0];
+reg     [6:0] dest_PRN[63:0];
+reg     [6:0] dest_PRN_old[63:0];
+reg     [4:0] dest_ARN[63:0];
+reg           br_pred[63:0];
+reg           br_actual[63:0];
+reg    [63:0] target_addr[63:0];
+reg           ex_done[63:0];
+reg           wr_mem[63:0];
+
+reg     [6:0] ROB_head_pointer1;
+reg     [6:0] ROB_tail_pointer1;
+reg     [6:0] next_ROB_head_pointer1;
+reg     [6:0] next_ROB_tail_pointer1;
+
+wire    [6:0] ROB_head_pointer2;
+wire    [6:0] ROB_tail_pointer2;
+wire    [6:0] next_ROB_head_pointer2;
+wire    [6:0] next_ROB_tail_pointer2;
+
+wire          mispredict;
+
+assign ROB_load_allowed1_in = (next_ROB_tail_pointer1 != ROB_head_pointer1) &&
+                              ROB_instr_valid1_in ? ROB_load1_in : 1'b0;
+assign ROB_load_allowed2_in = (next_ROB_tail_pointer2 != ROB_head_pointer2) &&
+                              ROB_instr_valid2_in ? ROB_load2_in : 1'b0;
+assign mispredict = (br_actual[ROB_head_pointer1] != br_pred[ROB_head_pointer1]);
+
+assign ROB_head_pointer2 = ROB_head_pointer1 + 1;
+assign ROB_tail_pointer2 = ROB_tail_pointer1 + 1;
+
+always @*
+begin
+   next_ROB_tail_pointer1 = ROB_tail_pointer1 + 2;
+   next_ROB_head_pointer1 = ROB_head_pointer1 + 2;
+end
+
+// issuing to the ROB
+always @(posedge clock)
+begin
+  //$display("load_allow1:%d", ROB_load_allowed1_in);
+  //$display("load_allow2:%d", ROB_load_allowed2_in);
+  //$display("load1:%d", ROB_load1_in);
+  //$display("load2:%d", ROB_load2_in);
+  //$display("head1:%d", ROB_head_pointer1);
+  //$display("head2:%d", ROB_head_pointer2);
+  //$display("tail1:%d", ROB_tail_pointer1);
+  //$display("tail2:%d", ROB_tail_pointer2);
+
+
+   if(reset)
+   begin
+      for(i = 0; i < 64; i = i + 1)
+      begin
+         NPC[i] <= `SD 0;
+         PC[i]  <= `SD 0;
+         dest_PRN[i] <= `SD 0;
+         dest_PRN_old[i] <= `SD 0;
+         dest_ARN[i] <= `SD 0;
+         br_pred[i] <= `SD 0;
+         br_actual[i] <= `SD 0;
+         target_addr[i] <= `SD 0;
+         ex_done[i] <= `SD 0;
+         wr_mem[i] <= `SD 0;
+      end      
+      ROB_head_pointer1 <= `SD 0;
+      ROB_tail_pointer1 <= `SD 0;
+   end
+   else
+   begin
+      if(ROB_load_allowed1_in && ROB_load_allowed2_in)
+      begin
+         NPC[ROB_tail_pointer1] <= `SD ROB_NPC1_in;
+         PC[ROB_tail_pointer1]  <= `SD ROB_PC1_in;
+         dest_PRN[ROB_tail_pointer1] <= `SD ROB_dest_PRN1_in;
+         dest_PRN_old[ROB_tail_pointer1] <= `SD ROB_dest_PRN_old1_in;
+         dest_ARN[ROB_tail_pointer1] <= `SD ROB_dest_ARN1_in;
+         br_pred[ROB_tail_pointer1] <= `SD ROB_br_pred1_in;
+         br_actual[ROB_tail_pointer1] <= `SD ROB_br_actual1_in;
+         target_addr[ROB_tail_pointer1] <= `SD ROB_target_addr1_in;
+         wr_mem[ROB_tail_pointer1] <= `SD ROB_wr_mem1_in;
+
+         NPC[ROB_tail_pointer2] <= `SD ROB_NPC2_in;
+         PC[ROB_tail_pointer2]  <= `SD ROB_PC2_in;
+         dest_PRN[ROB_tail_pointer2] <= `SD ROB_dest_PRN2_in;
+         dest_PRN_old[ROB_tail_pointer2] <= `SD ROB_dest_PRN_old2_in;
+         dest_ARN[ROB_tail_pointer2] <= `SD ROB_dest_ARN2_in;
+         br_pred[ROB_tail_pointer2] <= `SD ROB_br_pred2_in;
+         br_actual[ROB_tail_pointer2] <= `SD ROB_br_actual2_in;
+         target_addr[ROB_tail_pointer2] <= `SD ROB_target_addr2_in;
+         wr_mem[ROB_tail_pointer2] <= `SD ROB_wr_mem2_in;
+
+         ROB_tail_pointer1 <= `SD next_ROB_tail_pointer1;
+      end
+      else if(ROB_load_allowed1_in && ~ROB_load_allowed2_in)
+      begin
+         NPC[ROB_tail_pointer1] <= `SD ROB_NPC1_in;
+         PC[ROB_tail_pointer1]  <= `SD ROB_PC1_in;
+         dest_PRN[ROB_tail_pointer1] <= `SD ROB_dest_PRN1_in;
+         dest_PRN_old[ROB_tail_pointer1] <= `SD ROB_dest_PRN_old1_in;
+         dest_ARN[ROB_tail_pointer1] <= `SD ROB_dest_ARN1_in;
+         br_pred[ROB_tail_pointer1] <= `SD ROB_br_pred1_in;
+         br_actual[ROB_tail_pointer1] <= `SD ROB_br_actual1_in;
+         target_addr[ROB_tail_pointer1] <= `SD ROB_target_addr1_in;
+         wr_mem[ROB_tail_pointer1] <= `SD ROB_wr_mem1_in;
+         ROB_tail_pointer1 <= `SD ROB_tail_pointer2;
+      end
+      else if(~ROB_load_allowed1_in && ROB_load_allowed2_in)
+      begin
+         NPC[ROB_tail_pointer1] <= `SD ROB_NPC2_in;
+         PC[ROB_tail_pointer1]  <= `SD ROB_PC2_in;
+         dest_PRN[ROB_tail_pointer1] <= `SD ROB_dest_PRN2_in;
+         dest_PRN_old[ROB_tail_pointer1] <= `SD ROB_dest_PRN_old2_in;
+         dest_ARN[ROB_tail_pointer1] <= `SD ROB_dest_ARN2_in;
+         br_pred[ROB_tail_pointer1] <= `SD ROB_br_pred2_in;
+         br_actual[ROB_tail_pointer1] <= `SD ROB_br_actual2_in;
+         target_addr[ROB_tail_pointer1] <= `SD ROB_target_addr2_in;
+         wr_mem[ROB_tail_pointer1] <= `SD ROB_wr_mem2_in;
+         ROB_tail_pointer1 <= `SD ROB_tail_pointer2;
+      end
+
+      ex_done[ROB_num1_in] <= `SD 1'b1;
+      ex_done[ROB_num2_in] <= `SD 1'b1;
+
+   end
+end
+
+// committing
+always @(posedge clock)
+begin
+   if(~reset)
+   begin
+      if(ROB_flush1)
+      begin
+         ROB_tail_pointer1 <= `SD ROB_head_pointer1;
+         ROB_flush1 <= `SD 1'b0;
+      end
+      else if(ROB_flush2)
+      begin
+         ROB_tail_pointer1 <= `SD ROB_head_pointer2;
+         ROB_flush2 <= `SD 1'b0;
+      end
+      else
+      begin
+         //////////////////////////////////////////////////////////////////////////
+         // The instruction at the head of ROB, which pointed by Head Pointer 1  //
+         //////////////////////////////////////////////////////////////////////////
+         if(ex_done[ROB_head_pointer1])
+         begin
+            ROB_to_RRAT_PRN1_out <= `SD dest_PRN[ROB_head_pointer1];
+            ROB_to_RRAT_ARN1_out <= `SD dest_ARN[ROB_head_pointer1];
+            ROB_to_PRF_PRN_old1_out <= `SD dest_PRN_old[ROB_head_pointer1];
+
+            if(br_actual[ROB_head_pointer1])
+               ROB_to_fetch_target_addr1_out <= `SD target_addr[ROB_head_pointer1];
+            else
+               ROB_to_fetch_target_addr1_out <= `SD NPC[ROB_head_pointer1];
+
+            ROB_flush1 <= `SD 1'b0;
+            ROB_mis_predict1_out <= `SD 1'b0;
+            if(mispredict)
+            begin
+               ROB_flush1 <= `SD 1'b1;
+               ROB_mis_predict1_out <= `SD 1'b1;
+            end
+
+            if(~ex_done[ROB_head_pointer2] || mispredict || ~(wr_mem[ROB_head_pointer1] &&
+               wr_mem[ROB_head_pointer2]))
+               ROB_head_pointer1 <= `SD ROB_head_pointer2;
+            else
+               ROB_head_pointer1 <= `SD next_ROB_head_pointer1;
+         end
+
+         //////////////////////////////////////////////////////////////////////////
+         // The instruction at the head of ROB, which pointed by Head Pointer 2  //
+         //////////////////////////////////////////////////////////////////////////
+         if(ex_done[ROB_head_pointer1] && ex_done[ROB_head_pointer2] &&
+           (br_actual[ROB_head_pointer1]==br_pred[ROB_head_pointer2]) &&
+            ~(wr_mem[ROB_head_pointer1] && wr_mem[ROB_head_pointer2]))
+         begin
+            ROB_to_RRAT_PRN2_out <= `SD dest_PRN[ROB_head_pointer2];
+            ROB_to_RRAT_ARN2_out <= `SD dest_ARN[ROB_head_pointer2];
+            ROB_to_PRF_PRN_old2_out <= `SD dest_PRN_old[ROB_head_pointer2];
+
+            if(br_actual[ROB_head_pointer2])
+               ROB_to_fetch_target_addr1_out <= `SD target_addr[ROB_head_pointer1];
+            else
+               ROB_to_fetch_target_addr1_out <= `SD NPC[ROB_head_pointer1];
+
+            ROB_flush2 <= `SD 1'b0;
+            ROB_mis_predict2_out <= `SD 1'b0;
+            if(mispredict)
+            begin
+               ROB_flush2 <= `SD 1'b1;
+               ROB_mis_predict2_out <= `SD 1'b1;
+            end
+         end // end if
+      end
+   end
+end // end always
+endmodule
